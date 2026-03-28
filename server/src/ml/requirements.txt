@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pydantic
+# scikit-learn  # Add when real model training is implemented
+# pandas        # Add when data processing is required

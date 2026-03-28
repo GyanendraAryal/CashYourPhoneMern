@@ -1,0 +1,25 @@
+[Unit]
+Description=CashYourPhone API (Node/Express)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/cashyourphone/server
+User=ubuntu
+Group=ubuntu
+
+Environment=NODE_ENV=production
+Environment=PORT=4000
+EnvironmentFile=/var/www/cashyourphone/server/.env.production
+
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
