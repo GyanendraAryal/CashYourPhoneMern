@@ -1,0 +1,127 @@
+﻿node : (node:12196) 
+[MONGOOSE] Warning: 
+Duplicate schema index 
+on {"slug":1} found. 
+This is often due to 
+declaring an index 
+using both "index: 
+true" and 
+"schema.index()". 
+Please remove the 
+duplicate index 
+definition.
+At line:1 char:1
++ node server.js 2>&1 
+| Out-File -FilePath "C
+:\Users\Gyanendra\Deskt
+op\ ...
++ ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: ((node:12196)    
+ [M...dex definitio    
+n.:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+(Use `node 
+--trace-warnings ...` 
+to show where the 
+warning was created)
+(node:12196) 
+[MONGOOSE] Warning: 
+Duplicate schema index 
+on {"orderNumber":1} 
+found. This is often 
+due to declaring an 
+index using both 
+"index: true" and 
+"schema.index()". 
+Please remove the 
+duplicate index 
+definition.
+Γ£à MongoDB connected: ac-i2xz4az-shard-00-00.onnstz9.mongodb.net/cashyourphone
+Γ£à MongoDB connected successfully
+UNCAUGHT EXCEPTION: 
+Error: listen 
+EADDRINUSE: address 
+already in use :::4000
+    at Server.setupList
+enHandle [as _listen2] 
+(node:net:1908:16)
+    at listenInCluster 
+(node:net:1965:12)
+    at Server.listen 
+(node:net:2067:7)
+    at Function.listen 
+(C:\Users\Gyanendra\Des
+ktop\CashYourPhone_MERN
+\server\node_modules\ex
+press\lib\application.j
+s:635:24)
+    at start (file:///C
+:/Users/Gyanendra/Deskt
+op/CashYourPhone_MERN/s
+erver/server.js:259:24)
+    at process.processT
+icksAndRejections (node
+:internal/process/task_
+queues:95:5) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+node : (node:15148) 
+[MONGOOSE] Warning: 
+Duplicate schema index 
+on {"slug":1} found. 
+This is often due to 
+declaring an index 
+using both "index: 
+true" and 
+"schema.index()". 
+Please remove the 
+duplicate index 
+definition.
+At line:1 char:89
++ ... 
+SilentlyContinue; 
+Start-Sleep -Seconds 
+2; node server.js 2>&1 
+| Out-F ...
++                      
+                       
+  ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: ((node:15148)    
+ [M...dex definitio    
+n.:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+(Use `node 
+--trace-warnings ...` 
+to show where the 
+warning was created)
+(node:15148) 
+[MONGOOSE] Warning: 
+Duplicate schema index 
+on {"orderNumber":1} 
+found. This is often 
+due to declaring an 
+index using both 
+"index: true" and 
+"schema.index()". 
+Please remove the 
+duplicate index 
+definition.
+Γ£à MongoDB connected: ac-i2xz4az-shard-00-00.onnstz9.mongodb.net/cashyourphone
+Γ£à MongoDB connected successfully
+Γ£à CashYourPhone backend running on port 4000
