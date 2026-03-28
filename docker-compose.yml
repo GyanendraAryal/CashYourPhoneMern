@@ -1,0 +1,78 @@
+services:
+  # --- INFRASTRUCTURE ---
+  mongodb:
+    image: mongo:latest
+    container_name: cyp-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  redis:
+    image: redis:alpine
+    container_name: cyp-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # --- SERVICES ---
+  ml-service:
+    build:
+      context: ./server/src/ml
+      dockerfile: Dockerfile
+    container_name: cyp-ml-service
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: cyp-backend
+    restart: always
+    depends_on:
+      - mongodb
+      - redis
+      - ml-service
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/cashyourphone
+      - REDIS_URL=redis://redis:6379
+      - ML_SERVICE_URL=http://ml-service:8000
+      - PORT=4000
+      # Add other secrets (JWT, etc.) in a .env file locally
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:4000
+    container_name: cyp-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:4000
+    container_name: cyp-admin
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3001:80"
+
+volumes:
+  mongodb_data:
