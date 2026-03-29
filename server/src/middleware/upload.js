@@ -40,7 +40,9 @@ const processUploads = async (req, res, next) => {
   try {
     const files = req.files
       ? (Array.isArray(req.files) ? req.files : Object.values(req.files).flat())
-      : req.file ? [req.file] : [];
+      : req.file
+      ? [req.file]
+      : [];
 
     for (const f of files) {
       if (!f.buffer) continue;
@@ -48,22 +50,40 @@ const processUploads = async (req, res, next) => {
       // 1. Validate magic number
       const type = await fileTypeFromBuffer(f.buffer);
       if (!type || !["image/jpeg", "image/png", "image/webp"].includes(type.mime)) {
-        return next(new AppError("Invalid file content signature. Security check failed.", 400));
+        return next(new AppError("Invalid file content signature.", 400));
       }
 
-      // 2. Rename file securely with UUID format
+      // 2. Rename
       f.filename = `${f.fieldname}-${crypto.randomUUID()}.${type.ext}`;
 
-      // 3. If local mode, persist to disk so `.path` is available and compatible with controllers
-      if (!isCloudinaryMode()) {
+      // 🔥 3. HANDLE CLOUDINARY MODE
+      if (isCloudinaryMode()) {
+        const { uploadBufferToCloudinary } = await import("../utils/cloudinary.js");
+
+        const result = await uploadBufferToCloudinary(f, {
+          folder: req.uploadFolder,
+        });
+
+        // ✅ THIS IS THE MOST IMPORTANT LINE
+        req.body[f.fieldname] = result.secure_url;
+
+      } else {
+        // 4. Local storage
         const subFolder = req.uploadFolder || "general";
         const destDir = path.resolve(`uploads/${subFolder}`);
         ensureDir(destDir);
 
-        f.path = path.join(destDir, f.filename);
-        await fs.promises.writeFile(f.path, f.buffer);
+        const filePath = path.join(destDir, f.filename);
+        await fs.promises.writeFile(filePath, f.buffer);
+
+        // normalize to forward slashes for URLs
+        const relativePath = filePath.replace(process.cwd(), "").replace(/\\/g, "/");
+
+        // ✅ ALSO IMPORTANT
+        req.body[f.fieldname] = relativePath;
       }
     }
+
     next();
   } catch (error) {
     next(error);
