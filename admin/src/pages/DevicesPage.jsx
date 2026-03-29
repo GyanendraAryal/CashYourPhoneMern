@@ -4,6 +4,7 @@ import Modal from "../components/Modal";
 import Field from "../components/Field";
 import api from "../lib/api";
 import { uploadSingle } from "../lib/upload";
+import AppImage from "../../../client/src/components/ui/AppImage";
 
 const ALLOWED_CONDITIONS = ["new", "like_new", "pre_owned", "refurbished"];
 const ALLOWED_AVAILABILITY = ["in_stock", "coming_soon", "out_of_stock"]; // cycle order
@@ -404,10 +405,10 @@ export default function DevicesPage() {
                   <tr key={it._id} className="hover:bg-surface-white-subtle/60">
                     <td className="p-4">
                       {it.thumbnail ? (
-                        <img
-                          src={it.thumbnail}
+                        <AppImage
+                          src={device.imageUrl}
                           className="h-10 w-10 rounded-xl object-cover ring-1 ring-border-muted"
-                          alt=""
+                          alt={device.name}
                         />
                       ) : (
                         <div className="h-10 w-10 rounded-xl bg-surface-white-subtle ring-1 ring-border-muted" />
@@ -624,10 +625,10 @@ export default function DevicesPage() {
               <div className="flex flex-wrap gap-2">
                 {(form.images || []).map((url, idx) => (
                   <div key={idx} className="relative">
-                    <img
-                      src={url}
+                    <AppImage
+                      src={device.imageUrl}
                       className="h-16 w-16 object-cover rounded-xl ring-1 ring-border-muted"
-                      alt=""
+                      alt={device.name}
                     />
                     <button
                       type="button"
