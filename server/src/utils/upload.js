@@ -33,28 +33,30 @@ function validateFile(file) {
 /**
  * 🔒 Safe public URL generator
  */
-export function toPublicUploadUrl(req, filePathOrUrl) {
-  if (!req || !filePathOrUrl) return "";
+export function toPublicUploadUrl(req, input) {
+  if (!req || !input) return "";
+
+  let str = "";
+
+  // normalize input safely
+  if (typeof input === "string") {
+    str = input;
+  } else if (typeof input === "object" && input.url) {
+    str = input.url;
+  } else {
+    return "";
+  }
+
+  str = str.trim();
 
   const base = `${req.protocol}://${req.get("host")}`;
-  const str = String(filePathOrUrl).trim();
 
-  // 🚫 Block unknown external URLs
+  // external URL
   if (str.startsWith("http://") || str.startsWith("https://")) {
-    // allow only your CDN (optional)
-    if (!str.includes("cloudinary.com")) {
-      return ""; // block unknown domains
-    }
     return str;
   }
 
-  const normalized = str.replace(/\\/g, "/").replace(/\.\.+/g, "");
-
-  // Windows absolute paths: .../server/uploads/general/file.jpg → /uploads/general/file.jpg
-  const uploadsIdx = normalized.toLowerCase().indexOf("/uploads/");
-  if (uploadsIdx !== -1) {
-    return `${base}${normalized.slice(uploadsIdx)}`;
-  }
+  const normalized = str.replace(/\\/g, "/");
 
   if (normalized.startsWith("/uploads/")) return `${base}${normalized}`;
   if (normalized.startsWith("uploads/")) return `${base}/${normalized}`;
