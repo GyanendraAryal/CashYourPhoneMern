@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import SellRequest from "../../models/SellRequest.js";
+import { toPublicUploadUrl } from "../../utils/upload.js";
 
 /**
  * @desc List all sell requests with pagination and filtering
@@ -19,11 +20,18 @@ export const list = async (req, res, next) => {
 
     const total = await SellRequest.countDocuments(filter);
 
-    const items = await SellRequest.find(filter)
+    const itemsRaw = await SellRequest.find(filter)
       .sort(safeSort)
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit))
       .lean();
+
+    const items = itemsRaw.map(it => ({
+      ...it,
+      images: Array.isArray(it.images) 
+        ? it.images.map(img => toPublicUploadUrl(req, img)).filter(Boolean)
+        : []
+    }));
 
     res.json({
       total,
@@ -57,7 +65,15 @@ export const getOne = async (req, res, next) => {
       return res.status(404).json({ message: "Sell request not found" });
     }
 
-    res.json(item);
+    const doc = item.toObject ? item.toObject() : item;
+    const normalized = {
+      ...doc,
+      images: Array.isArray(doc.images)
+        ? doc.images.map(img => toPublicUploadUrl(req, img)).filter(Boolean)
+        : []
+    };
+
+    res.json(normalized);
   } catch (err) {
     next(err);
   }
