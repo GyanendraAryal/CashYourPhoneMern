@@ -17,12 +17,24 @@ router.get("/:id/recommendations", deviceController.getRecommendations);
 const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
 
+// Standard Admin CRUD (matching frontend paths)
+adminRouter.get("/", deviceController.listDevices);
+adminRouter.get("/:id", deviceController.getDevice);
+
 adminRouter.post(
   "/",
   setUploadFolder("devices"),
   upload.fields([{ name: "thumbnail", maxCount: 1 }, { name: "images", maxCount: 8 }]),
   validate(deviceSchema),
   deviceController.createDevice
+);
+
+adminRouter.put(
+  "/:id",
+  setUploadFolder("devices"),
+  upload.fields([{ name: "thumbnail", maxCount: 1 }, { name: "images", maxCount: 8 }]),
+  validate(updateDeviceSchema),
+  deviceController.updateDevice
 );
 
 adminRouter.patch(
