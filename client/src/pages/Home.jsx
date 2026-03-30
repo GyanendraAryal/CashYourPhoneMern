@@ -7,18 +7,37 @@ import { useDevices } from "../hooks/useDevices";
 import { DeviceListSkeleton } from "../components/skeletons/DeviceSkeleton";
 import { motion } from "framer-motion";
 import { normalizeDevice } from "../utils/normalize";
+import HeroSlider from "../components/HeroSlider";
 
 export default function Home() {
-  const { data, isLoading, error } = useDevices({ featured: true, limit: 12 });
+  const { data, isLoading, error } = useDevices({
+    featured: true,
+    limit: 12,
+  });
 
-  /** API: GET /api/v1/devices → { status, items, total, page, pages } */
+  // ✅ safer normalization
   const devices = useMemo(() => {
     const items = Array.isArray(data?.items) ? data.items : [];
-    return items.map((d) => normalizeDevice(d));
+
+    return items
+      .map((d) => {
+        try {
+          return normalizeDevice(d);
+        } catch (err) {
+          console.warn("Device normalize failed:", err);
+          return null;
+        }
+      })
+      .filter(Boolean); // remove broken items
   }, [data]);
 
   return (
     <>
+      {/* Hero Section */}
+      <section className="mb-8 sm:mb-10">
+        <HeroSlider />
+      </section>
+
       {/* Featured Products */}
       <section className="mt-6 sm:mt-8 mb-12 sm:mb-16">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -40,10 +59,16 @@ export default function Home() {
             {isLoading ? (
               <DeviceListSkeleton count={8} />
             ) : devices.length === 0 ? (
-              <p className="text-center col-span-full text-text-muted">No featured phones available right now.</p>
+              <p className="text-center col-span-full text-text-muted">
+                No featured phones available right now.
+              </p>
             ) : (
               devices.map((p, i) => (
-                <ProductCard key={p._id || i} product={p} index={i} />
+                <ProductCard
+                  key={p?._id || i}
+                  product={p || {}}
+                  index={i}
+                />
               ))
             )}
           </div>
