@@ -87,7 +87,7 @@ app.use("/api/admin/auth", authRoutes);
 
 // ✅ Protected routes (must have Bearer token)
 app.use("/api/admin/upload", requireAdmin, uploadRoutes);
-app.use("/api/admin/devices", requireAdmin, deviceRoutes);
+app.use("/admin/devices", requireAdmin, deviceRoutes);
 app.use("/api/admin/hero-slides", requireAdmin, heroRoutes);
 app.use("/api/admin/reviews", requireAdmin, reviewRoutes);
 app.use("/api/admin/sell-requests", requireAdmin, sellRoutes);
