@@ -65,10 +65,10 @@ function NavLinkItem({ to, isActive, children, onClick, className = "" }) {
       ) : null}
 
       <motion.span
-        whileHover={{ y: -1 }}
+        whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         className={[
-          "relative z-10 inline-flex items-center justify-center px-4 py-2 rounded-xl transition-colors duration-200",
+          "relative z-10 inline-flex items-center justify-center px-4 py-2 rounded-xl transition-all duration-200",
           isActive
             ? "text-white"
             : "text-text-primary hover:bg-primary-blue-muted/40 hover:text-text-primary",
@@ -144,47 +144,149 @@ export default function Navbar() {
     pathname === path ? "bg-primary-blue-muted/40 font-semibold text-text-primary" : "";
 
   const CartLink = ({ className = "", onClick }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const timeoutRef = useRef(null);
+    const { cart } = useCart();
+
     if (!user) return null;
 
-    return (
-      <Link
-        to="/cart"
-        onClick={(e) => {
-          markCartRead(); // ✅ mark read on click
-          onClick?.(e);
-        }}
-        className={`${className} relative`}
-        aria-label={`Cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}
-      >
-        <motion.span
-          whileHover={{ y: -1 }}
-          whileTap={{ scale: 0.98 }}
-          className={[
-            "inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-colors duration-200",
-            isActive("/cart")
-              ? "bg-primary-blue-active/90 text-white shadow-none"
-              : "text-text-primary hover:bg-primary-blue-muted/40",
-          ].join(" ")}
-        >
-          <CartIcon className="h-5 w-5" />
-          <span>Cart</span>
-        </motion.span>
+    const handleEnter = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setIsOpen(true);
+      if (cartUnread) markCartRead(); // ✅ Clear notification on hover/view
+    };
 
-        <AnimatePresence>
-          {cartUnread && cartCount > 0 ? (
+    const handleLeave = () => {
+      timeoutRef.current = setTimeout(() => setIsOpen(false), 300);
+    };
+
+    return (
+      <div 
+        className="relative group"
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+      >
+        <Link
+          to="/cart"
+          onClick={(e) => {
+            markCartRead();
+            onClick?.(e);
+          }}
+          className={`${className} relative inline-flex`}
+        >
+          {isActive("/cart") && (
             <motion.span
-              key="cart-badge"
-              initial={{ scale: 0.6, opacity: 0, y: -4 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.6, opacity: 0, y: -4 }}
-              transition={{ duration: 0.18, ease }}
-              className="absolute -top-2 -right-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-secondary-violet-active text-white text-xs font-extrabold shadow"
+              layoutId="active-pill"
+              className="absolute inset-0 rounded-xl bg-primary-blue-active/90 shadow-none"
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            />
+          )}
+
+          <motion.span
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={[
+              "relative z-10 inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200",
+              isActive("/cart")
+                ? "text-white"
+                : "text-text-primary hover:bg-primary-blue-muted/40",
+            ].join(" ")}
+          >
+            <CartIcon className="h-5 w-5" />
+            <span>Cart</span>
+          </motion.span>
+
+          <AnimatePresence>
+            {cartUnread && cartCount > 0 ? (
+              <motion.span
+                key="cart-badge"
+                initial={{ scale: 0.6, opacity: 0, y: -4 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.6, opacity: 0, y: -4 }}
+                transition={{ duration: 0.18, ease }}
+                className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-secondary-violet-active text-white text-xs font-extrabold shadow-sm border border-white"
+              >
+                {cartCount > 99 ? "99+" : cartCount}
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
+        </Link>
+
+        {/* Desktop Cart Preview Dropdown */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              variants={dropdownVars}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="hidden md:block absolute right-0 mt-1 w-80 rounded-2xl border border-border-muted bg-white shadow-2xl overflow-hidden z-[60]"
             >
-              {cartCount > 99 ? "99+" : cartCount}
-            </motion.span>
-          ) : null}
+              <div className="p-4 border-b border-border-muted bg-primary-blue-muted/10">
+                <h3 className="font-extrabold text-text-primary flex items-center justify-between">
+                  <span>Your Cart</span>
+                  <span className="text-xs font-bold text-text-muted bg-white/50 px-2 py-0.5 rounded-lg">
+                    {cartCount} items
+                  </span>
+                </h3>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                {cart?.items?.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-text-muted">Your cart is empty</p>
+                  </div>
+                ) : (
+                  cart?.items?.map((it, idx) => (
+                    <div key={idx} className="flex gap-3 p-2 rounded-xl hover:bg-surface-white-subtle transition-colors group/item">
+                      <img 
+                        src={it.thumbnailSnapshot} 
+                        alt={it.nameSnapshot} 
+                        className="w-12 h-12 rounded-lg object-cover border border-border-muted"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold truncate group-hover/item:text-primary-blue-active transition-colors">
+                          {it.nameSnapshot}
+                        </div>
+                        <div className="text-xs text-text-muted mt-0.5">
+                          {it.qty} × NPR {it.unitPriceSnapshot?.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {cart?.items?.length > 0 && (
+                <div className="p-4 bg-surface-white-subtle/50 border-t border-border-muted">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-bold text-text-muted">Subtotal</span>
+                    <span className="font-extrabold text-primary-blue-active">
+                      NPR {cart?.total || cart?.subtotal?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      to="/cart"
+                      onClick={() => setIsOpen(false)}
+                      className="px-4 py-2.5 bg-white border border-border-muted rounded-xl text-xs font-extrabold text-center hover:bg-white/50 transition-colors"
+                    >
+                      View Cart
+                    </Link>
+                    <Link
+                      to="/checkout"
+                      onClick={() => setIsOpen(false)}
+                      className="px-4 py-2.5 bg-primary-blue-active text-white rounded-xl text-xs font-extrabold text-center hover:opacity-90 shadow-sm transition-all"
+                    >
+                      Checkout
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
         </AnimatePresence>
-      </Link>
+      </div>
     );
   };
 
@@ -240,9 +342,9 @@ export default function Navbar() {
                 <motion.button
                   type="button"
                   onClick={() => setProfileOpen((v) => !v)}
-                  whileHover={{ y: -1 }}
+                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border-muted px-3 py-2 transition-colors duration-200 hover:bg-primary-blue-muted/30"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border-muted px-3 py-2 transition-all duration-200 hover:bg-primary-blue-muted/30"
                 >
                   <div className="h-8 w-8 rounded-full bg-primary-blue-active/90 text-white flex items-center justify-center text-sm font-extrabold">
                     {initials}
