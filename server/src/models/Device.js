@@ -14,6 +14,8 @@ const deviceSchema = new mongoose.Schema(
 
     slug: {
       type: String,
+      unique: true,
+      index: true,
     },
 
     brand: {
@@ -101,6 +103,13 @@ deviceSchema.pre("validate", async function () {
       .replace(/\s|-/g, "_");
   }
 
+  // ✅ Auto-sync availability with quantity
+  if (this.quantity === 0) {
+    this.availability = "out_of_stock";
+  } else if (this.quantity > 0 && this.availability === "out_of_stock") {
+    this.availability = "in_stock";
+  }
+
   // Generate slug if missing
   if (!this.slug && this.name) {
     this.slug = slugify(this.name, { lower: true, strict: true });
@@ -136,7 +145,6 @@ deviceSchema.index(
 deviceSchema.index({ featured: 1, createdAt: -1 });
 deviceSchema.index({ brand: 1, price: 1 });
 deviceSchema.index({ condition: 1, availability: 1, price: 1, createdAt: -1 });
-deviceSchema.index({ slug: 1 }, { unique: true });
 deviceSchema.index({ createdAt: -1 });
 
 export default mongoose.model("Device", deviceSchema);
