@@ -44,6 +44,8 @@ const processUploads = async (req, res, next) => {
       ? [req.file]
       : [];
 
+    const fieldResults = {}; // { fieldname: [urls] }
+    
     for (const f of files) {
       if (!f.buffer) continue;
 
@@ -56,6 +58,8 @@ const processUploads = async (req, res, next) => {
       // 2. Rename
       f.filename = `${f.fieldname}-${crypto.randomUUID()}.${type.ext}`;
 
+      let resultUrl = "";
+
       // 🔥 3. HANDLE CLOUDINARY MODE
       if (isCloudinaryMode()) {
         const { uploadBufferToCloudinary } = await import("../utils/cloudinary.js");
@@ -64,12 +68,11 @@ const processUploads = async (req, res, next) => {
           folder: req.uploadFolder,
         });
 
-        // ✅ THIS IS THE MOST IMPORTANT LINE
-        req.body[f.fieldname] = result.secure_url;
-
+        resultUrl = result.secure_url;
       } else {
         // 4. Local storage
-        const subFolder = req.uploadFolder || "general";
+        const subFolderRaw = req.uploadFolder || "general";
+        const subFolder = typeof subFolderRaw === "string" ? subFolderRaw : "general";
         const destDir = path.resolve(`uploads/${subFolder}`);
         ensureDir(destDir);
 
@@ -78,9 +81,26 @@ const processUploads = async (req, res, next) => {
 
         // normalize to forward slashes for URLs
         const relativePath = filePath.replace(process.cwd(), "").replace(/\\/g, "/");
+        resultUrl = relativePath;
+      }
 
-        // ✅ ALSO IMPORTANT
-        req.body[f.fieldname] = relativePath;
+      // ✅ Store result in fieldResults
+      if (!fieldResults[f.fieldname]) {
+        fieldResults[f.fieldname] = [];
+      }
+      fieldResults[f.fieldname].push(resultUrl);
+    }
+
+    // ✅ Move fieldResults to req.body
+    for (const [field, urls] of Object.entries(fieldResults)) {
+      // If it looks like a single-file field (by conventional name or check), 
+      // we can optionally set the flat value, but it's safer to provide both
+      // if field ends with [] or was part of an array upload, or just keep as array.
+      // For devices: "thumbnail" is single, "images" is array.
+      if (urls.length === 1 && field !== "images") {
+        req.body[field] = urls[0];
+      } else {
+        req.body[field] = urls;
       }
     }
 
