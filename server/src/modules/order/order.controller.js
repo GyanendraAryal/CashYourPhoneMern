@@ -21,7 +21,7 @@ export const createOrderFromCart = async (req, res, next) => {
 
 export const getMyOrders = async (req, res, next) => {
   try {
-    const orders = await orderService.getUserOrders(req.user.id);
+    const orders = await orderService.getUserOrders(req.user.id, req);
     res.status(200).json({
       status: "success",
       results: orders.length,
@@ -34,7 +34,7 @@ export const getMyOrders = async (req, res, next) => {
 
 export const getOrderById = async (req, res, next) => {
   try {
-    const order = await orderService.getOrder(req.params.id, req.user.id);
+    const order = await orderService.getOrder(req.params.id, req.user.id, req);
     res.status(200).json({
       status: "success",
       data: order
