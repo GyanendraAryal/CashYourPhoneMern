@@ -9,10 +9,16 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
   const nav = useNavigate();
-  const { cart, refreshCart } = useCart();
+  const { cart, refreshCart, loading: cartLoading } = useCart();
   const formRef = useRef(null);
 
   const [orderId, setOrderId] = useState("");
+
+  // ✅ Safety: Redirect if cart is empty after loading
+  if (!cartLoading && (!cart || !cart.items || cart.items.length === 0) && !orderId) {
+    nav("/cart");
+    return null;
+  }
 
   const [contact, setContact] = useState({
     fullName: "",
@@ -118,13 +124,31 @@ export default function Checkout() {
       <h1 className="text-xl font-bold mb-4">Checkout</h1>
 
       <div className="rounded-xl border bg-white p-4 mb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-semibold">Order Summary</div>
-            <div className="text-xs text-text-muted">Items: {(cart?.items || []).length}</div>
-          </div>
-          <div className="text-sm">
-            Total: <b>NPR {Number(cart?.subtotal || 0).toLocaleString("en-NP")}</b>
+        <div className="font-semibold mb-3 border-b pb-2">Order Summary</div>
+        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+          {(cart?.items || []).map((it, idx) => (
+            <div key={idx} className="flex gap-3 items-center">
+              <img 
+                src={it.thumbnailSnapshot} 
+                alt={it.nameSnapshot} 
+                className="w-12 h-12 rounded-lg object-cover border border-border-muted"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold truncate">{it.nameSnapshot}</div>
+                <div className="text-xs text-text-muted">
+                  Qty: {it.qty} × NPR {it.unitPriceSnapshot?.toLocaleString()}
+                </div>
+              </div>
+              <div className="text-sm font-bold">
+                NRP {(it.qty * it.unitPriceSnapshot)?.toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 pt-3 border-t flex items-center justify-between">
+          <div className="text-sm text-text-muted">Total Amount</div>
+          <div className="text-lg font-extrabold text-text-primary">
+            NPR {Number(cart?.subtotal || 0).toLocaleString("en-NP")}
           </div>
         </div>
       </div>
