@@ -3,6 +3,7 @@ import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { requireAdminRole } from "../../middleware/requireAdminRole.js";
 import { auditAdmin } from "../../middleware/auditAdmin.js";
 import { uploadAdmin } from "../../middleware/adminMulter.js";
+import { setUploadFolder } from "../../middleware/upload.js";
 import {
   listAdmin,
   getOne,
@@ -14,6 +15,7 @@ import {
 const router = Router();
 
 router.use(requireAdmin);
+router.use(setUploadFolder("hero"));
 
 router.get("/", listAdmin);
 router.get("/:id", getOne);
