@@ -9,13 +9,14 @@ const OrderItemSchema = new mongoose.Schema(
     condition: { type: String, default: "" },
     price: { type: Number, required: true, min: 0 },
     qty: { type: Number, required: true, min: 1 },
+    thumbnail: { type: String, default: "" },
   },
   { _id: false }
 );
 
 const OrderSchema = new mongoose.Schema(
   {
-    orderNumber: { type: String },
+    orderNumber: { type: String, unique: true, index: true },
 
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
 
@@ -52,7 +53,6 @@ const OrderSchema = new mongoose.Schema(
 OrderSchema.index({ user: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
-OrderSchema.index({ orderNumber: 1 }, { unique: true });
 OrderSchema.index({ createdAt: -1 });
 
 export default mongoose.model("Order", OrderSchema);
