@@ -24,7 +24,7 @@ function lineKey(deviceId, variant) {
 }
 
 export const getCart = asyncHandler(async (req, res) => {
-  const data = await buildCartResponse(req.user.id);
+  const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
 
@@ -66,7 +66,7 @@ export const addItem = asyncHandler(async (req, res) => {
 
   await cart.save();
 
-  const data = await buildCartResponse(req.user.id);
+  const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
 
@@ -81,7 +81,7 @@ export const updateItem = asyncHandler(async (req, res) => {
 
   const cart = await Cart.findOne({ user: req.user.id });
   if (!cart) {
-    const data = await buildCartResponse(req.user.id);
+    const data = await buildCartResponse(req, req.user.id);
     return res.json(data);
   }
 
@@ -91,7 +91,7 @@ export const updateItem = asyncHandler(async (req, res) => {
   const idx = idxByItemId !== -1 ? idxByItemId : idxByProductId;
 
   if (idx === -1) {
-    const data = await buildCartResponse(req.user.id);
+    const data = await buildCartResponse(req, req.user.id);
     return res.json(data);
   }
 
@@ -106,7 +106,7 @@ export const updateItem = asyncHandler(async (req, res) => {
   cart.lastUpdatedAt = new Date();
   await cart.save();
 
-  const data = await buildCartResponse(req.user.id);
+  const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
 
@@ -116,7 +116,7 @@ export const removeItem = asyncHandler(async (req, res) => {
 
   const cart = await Cart.findOne({ user: req.user.id });
   if (!cart) {
-    const data = await buildCartResponse(req.user.id);
+    const data = await buildCartResponse(req, req.user.id);
     return res.json(data);
   }
 
@@ -126,14 +126,14 @@ export const removeItem = asyncHandler(async (req, res) => {
   cart.items = cart.items.filter((i) => String(i._id) !== id && String(i.product) !== id);
 
   if (cart.items.length === before) {
-    const data = await buildCartResponse(req.user.id);
+    const data = await buildCartResponse(req, req.user.id);
     return res.json(data);
   }
 
   cart.lastUpdatedAt = new Date();
   await cart.save();
 
-  const data = await buildCartResponse(req.user.id);
+  const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
 
@@ -187,7 +187,7 @@ export const mergeCart = asyncHandler(async (req, res) => {
   cart.lastUpdatedAt = new Date();
   await cart.save();
 
-  const data = await buildCartResponse(req.user.id);
+  const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
 
@@ -208,6 +208,6 @@ export const markSeen = asyncHandler(async (req, res) => {
     cart.lastSeenAt = new Date();
     await cart.save();
   }
-  const data = await buildCartResponse(req.user.id);
+  const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
