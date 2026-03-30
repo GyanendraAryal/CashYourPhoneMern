@@ -5,6 +5,7 @@ import Device from "../../models/Device.js";
 import Counter from "../../models/Counter.js";
 import { createAdminNotification } from "../../services/adminNotification.service.js";
 import AppError from "../../utils/AppError.js";
+import { toPublicUploadUrl } from "../../utils/upload.js";
 
 /**
  * Generate a sequential order number (e.g., CYP-20260321-000001)
@@ -16,7 +17,7 @@ async function genSequentialOrderNumber(session) {
   const dd = String(d.getDate()).padStart(2, "0");
 
   const c = await Counter.findByIdAndUpdate(
-    { _id: "order" },
+    "order",
     { $inc: { seq: 1 } },
     { new: true, upsert: true, session }
   );
@@ -32,6 +33,7 @@ export const createOrder = async (userId, contactData, session) => {
   const { fullName, phone, email, address } = contactData;
 
   const cart = await Cart.findOne({ user: userId }).session(session);
+
   if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
     throw new AppError("Cart is empty", 400);
   }
@@ -44,18 +46,26 @@ export const createOrder = async (userId, contactData, session) => {
   const items = cart.items
     .map((it) => {
       const d = byId.get(String(it.product));
-      if (!d) throw new AppError(`Device ${it.product} not found in catalog`, 400);
+      if (!d) {
+        console.error(`[CHECKOUT FAIL] Device ${it.product} not found in catalog. User: ${userId}`);
+        throw new AppError(`Product ID ${it.product} is no longer in our catalog. Please remove it from your cart.`, 400);
+      }
       
       if (d.availability === "out_of_stock" || (d.quantity !== undefined && d.quantity < it.qty)) {
         throw new AppError(`Device out of stock or insufficient quantity: ${d.name}`, 400);
       }
 
-      if (Number(it.priceSnapshot) !== Number(d.price)) {
+      // If priceSnapshot is missing or 0, we'll accept the current price for legacy items
+      const snapshot = Number(it.priceSnapshot || 0);
+      const currentPrice = Number(d.price || 0);
+      
+      if (snapshot > 0 && snapshot !== currentPrice) {
+        console.warn(`Price mismatch for ${d.name}: cart has ${snapshot}, db has ${currentPrice}`);
         throw new AppError(`Price changed for item: ${d.name}. Please refresh cart.`, 400);
       }
 
       const qty = Number(it.qty || 0);
-      const price = Number(d.price || 0);
+      const price = currentPrice;
       total += price * qty;
 
       return {
@@ -64,6 +74,7 @@ export const createOrder = async (userId, contactData, session) => {
         condition: d.condition,
         price,
         qty,
+        thumbnail: d.thumbnail || (Array.isArray(d.images) && d.images.length ? d.images[0] : ""),
       };
     })
     .filter(Boolean);
@@ -107,8 +118,15 @@ export const createOrder = async (userId, contactData, session) => {
 /**
  * GET user orders
  */
-export const getUserOrders = async (userId) => {
-  return await Order.find({ user: userId }).sort({ createdAt: -1 }).lean();
+export const getUserOrders = async (userId, req) => {
+  const orders = await Order.find({ user: userId }).sort({ createdAt: -1 }).lean();
+  return orders.map(o => ({
+    ...o,
+    items: (o.items || []).map(it => ({
+      ...it,
+      thumbnail: toPublicUploadUrl(req, it.thumbnail || "")
+    }))
+  }));
 };
 
 /**
@@ -119,7 +137,14 @@ export const getOrder = async (orderId, userId) => {
   if (!order || !order.user.equals(userId)) {
     throw new AppError("Order not found", 404);
   }
-  return order;
+
+  const normalized = order.toObject();
+  normalized.items = (normalized.items || []).map(it => ({
+    ...it,
+    thumbnail: toPublicUploadUrl(req, it.thumbnail || "")
+  }));
+
+  return normalized;
 };
 
 /**
