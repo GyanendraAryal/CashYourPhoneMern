@@ -1,3 +1,9 @@
-import api from "../lib/api";
+import api  from "../lib/api";
 
-export const getHeroSlides = (params = {}) => api.get("/api/v1/hero-slides", { params });
+/**
+ * Fetch hero slides
+ * Backend: GET /api/heroslides
+ */
+export const getHeroSlides = (params = {}) => {
+  return api.get("/api/v1/hero-slides", { params });
+};
