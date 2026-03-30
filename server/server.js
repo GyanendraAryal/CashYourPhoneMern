@@ -24,7 +24,7 @@ import { sanitizeXss } from "./src/middleware/sanitizeXss.js";
 import * as Sentry from "@sentry/node";
 
 // Routes
-import { deviceRoutes } from "./src/modules/device/device.routes.js";
+import { deviceRoutes, adminDeviceRoutes as modularAdminDeviceRoutes } from "./src/modules/device/device.routes.js";
 import heroRoutes from "./src/routes/hero.routes.js";
 import reviewRoutes from "./src/routes/review.routes.js";
 import productReviewRoutes from "./src/routes/productReview.routes.js";
@@ -36,7 +36,7 @@ import userRoutes from "./src/modules/user/user.routes.js";
 import adminAuthRoutes from "./src/routes/admin/auth.routes.js";
 
 import adminHeroRoutes from "./src/routes/admin/hero.routes.js";
-import adminDeviceRoutes from "./src/routes/admin/device.routes.js";
+// import adminDeviceRoutes from "./src/routes/admin/device.routes.js"; // consolidated into modular routes
 import adminReviewRoutes from "./src/routes/admin/review.routes.js";
 import adminNotificationsRoutes from "./src/routes/admin/notifications.routes.js";
 import adminProductReviewRoutes from "./src/routes/admin/productReview.routes.js";
@@ -243,7 +243,7 @@ app.use("/api/v1/csrf", csrfRoutes);
 
 // Admin Routes
 app.use("/api/admin/auth", adminAuthRoutes);
-app.use("/api/admin/devices", adminDeviceRoutes);
+app.use("/admin/devices", modularAdminDeviceRoutes);
 app.use("/api/admin/hero", adminHeroRoutes);
 app.use("/api/admin/reviews", adminReviewRoutes);
 app.use("/api/admin/product-reviews", adminProductReviewRoutes);
