@@ -30,8 +30,8 @@ function Btn({ children, onClick, variant = "default", disabled, title }) {
     variant === "primary"
       ? "bg-primary-blue-active text-white hover:opacity-90"
       : variant === "danger"
-      ? "border border-primary-blue-muted bg-primary-blue-muted text-primary-blue-active hover:bg-primary-blue-muted"
-      : "border border-border-muted bg-white text-text-primary hover:bg-surface-white-subtle";
+        ? "border border-primary-blue-muted bg-primary-blue-muted text-primary-blue-active hover:bg-primary-blue-muted"
+        : "border border-border-muted bg-white text-text-primary hover:bg-surface-white-subtle";
 
   return (
     <button
@@ -310,10 +310,158 @@ export default function HeroSlidesPage() {
                   </Btn>
                 </td>
               </tr>
-            ))}
-          </tbody>
+            ))}          </tbody>
         </table>
       </div>
+
+      {/* New/Edit Modal */}
+      <Modal
+        open={open}
+        title={editingId ? "Edit Slide" : "New Slide"}
+        onClose={() => setOpen(false)}
+      >
+        {err && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm">
+            {err}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Title">
+            <InputShell>
+              <input
+                className="w-full border rounded-xl p-2 outline-none focus:ring-2 focus:ring-primary-blue-active/20"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+            </InputShell>
+          </Field>
+
+          <Field label="Subtitle">
+            <InputShell>
+              <input
+                className="w-full border rounded-xl p-2 outline-none focus:ring-2 focus:ring-primary-blue-active/20"
+                value={form.subtitle}
+                onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
+              />
+            </InputShell>
+          </Field>
+
+          <Field label="CTA Text">
+            <InputShell>
+              <input
+                className="w-full border rounded-xl p-2 outline-none focus:ring-2 focus:ring-primary-blue-active/20"
+                value={form.ctaText}
+                onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
+              />
+            </InputShell>
+          </Field>
+
+          <Field label="CTA Link">
+            <InputShell>
+              <input
+                className="w-full border rounded-xl p-2 outline-none focus:ring-2 focus:ring-primary-blue-active/20"
+                value={form.ctaLink}
+                onChange={(e) => setForm({ ...form, ctaLink: e.target.value })}
+              />
+            </InputShell>
+          </Field>
+
+          <Field label="Order">
+            <InputShell>
+              <input
+                type="number"
+                className="w-full border rounded-xl p-2 outline-none focus:ring-2 focus:ring-primary-blue-active/20"
+                value={form.order}
+                onChange={(e) => setForm({ ...form, order: e.target.value })}
+              />
+            </InputShell>
+          </Field>
+
+          <Field label="Active">
+            <div className="flex items-center gap-2 pt-2">
+              <Toggle
+                checked={form.active}
+                onChange={(v) => setForm({ ...form, active: v })}
+              />
+              <span className="text-sm font-semibold">{form.active ? "Enabled" : "Disabled"}</span>
+            </div>
+          </Field>
+
+          <div className="md:col-span-2 border-t pt-4 mt-2">
+            <h4 className="text-sm font-bold mb-3">Slide Images</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Desktop Image */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Desktop Image (Required)</label>
+                {form.imageDesktop ? (
+                  <div className="relative group">
+                    <img src={form.imageDesktop} className="w-full h-32 object-cover rounded-xl border" alt="desktop" />
+                    <button
+                      type="button"
+                      onClick={clearDesktop}
+                      className="absolute top-2 right-2 bg-white/90 p-1 rounded-full shadow-sm hover:bg-white text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-32 border-2 border-dashed rounded-xl flex items-center justify-center p-4">
+                    <input
+                      type="file"
+                      onChange={(e) => onPickDesktop(e.target.files?.[0])}
+                      className="text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile Image */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Mobile Image (Optional)</label>
+                {form.imageMobile ? (
+                  <div className="relative group">
+                    <img src={form.imageMobile} className="w-full h-32 object-cover rounded-xl border" alt="mobile" />
+                    <button
+                      type="button"
+                      onClick={clearMobile}
+                      className="absolute top-2 right-2 bg-white/90 p-1 rounded-full shadow-sm hover:bg-white text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-32 border-2 border-dashed rounded-xl flex items-center justify-center p-4">
+                    <input
+                      type="file"
+                      onChange={(e) => onPickMobile(e.target.files?.[0])}
+                      className="text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 flex justify-end gap-2">
+          <Btn onClick={() => setOpen(false)} disabled={busy}>Cancel</Btn>
+          <Btn variant="primary" onClick={save} disabled={busy}>
+            {busy ? "Saving..." : "Save Slide"}
+          </Btn>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <Modal open={!!deleteId} title="Confirm Delete" onClose={() => setDeleteId(null)}>
+        <p className="text-sm">Are you sure you want to delete this hero slide?</p>
+        <div className="mt-8 flex justify-end gap-2">
+          <Btn onClick={() => setDeleteId(null)}>Cancel</Btn>
+          <Btn variant="danger" onClick={doDelete} disabled={deleteLoading}>
+            {deleteLoading ? "Deleting..." : "Delete Slide"}
+          </Btn>
+        </div>
+      </Modal>
     </Shell>
   );
 }
