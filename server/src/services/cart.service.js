@@ -1,6 +1,7 @@
 import Cart from "../models/Cart.js";
 import Device from "../models/Device.js";
 import AppError from "../utils/AppError.js";
+import { toPublicUploadUrl } from "../utils/upload.js";
 
 const MAX_QTY = 5;
 const CURRENCY = "NPR";
@@ -29,8 +30,9 @@ export function variantKey(v) {
  * Fetch cart and shape it for the client.
  * NOTE: We project populated Device fields to avoid over-fetching.
  */
-export async function buildCartResponse(userId) {
-  const cart = await Cart.findOne({ user: userId }).populate({
+export async function buildCartResponse(req, userId) {
+  const id = userId || req.user?.id;
+  const cart = await Cart.findOne({ user: id }).populate({
     path: "items.product",
     select: "name thumbnail images price availability",
   });
@@ -41,7 +43,8 @@ export async function buildCartResponse(userId) {
     const p = it.product || {};
 
     const v = normVariant(it.variant);
-    const outOfStock = String(p.availability || "").toLowerCase() === "out_of_stock";
+    const pExist = Boolean(p && p._id);
+    const outOfStock = pExist && String(p.availability || "").toLowerCase() === "out_of_stock";
 
     const unit = Number(it.priceSnapshot || p.price || 0);
     const qty = clampQty(it.qty);
@@ -52,27 +55,27 @@ export async function buildCartResponse(userId) {
 
     return {
       // ✅ contract: cart line item id
-      // For legacy carts (created when _id was disabled), fall back to device id
       id: String(it._id || p._id || it.product),
 
       deviceId: String(p._id || it.product),
-
       variant: v,
 
       qty,
       maxQty: MAX_QTY,
 
-      nameSnapshot: p.name || "Device",
-      thumbnailSnapshot:
+      nameSnapshot: it.nameSnapshot || p.name || "Unknown Device",
+      thumbnailSnapshot: toPublicUploadUrl(req, 
         p.thumbnail ||
         (Array.isArray(p.images) && p.images.length ? p.images[0] : "") ||
-        "/phone-placeholder.png",
+        "/phone-placeholder.png"
+      ),
 
       unitPriceSnapshot: snapshot,
       latestUnitPrice: latest,
-      priceChanged: snapshot !== latest,
+      priceChanged: pExist && snapshot !== latest,
 
       outOfStock,
+      isDeleted: !pExist,
 
       unitPrice: unit,
       lineTotal,
@@ -84,13 +87,14 @@ export async function buildCartResponse(userId) {
 
   const lastUpdatedAt = cart?.lastUpdatedAt ? new Date(cart.lastUpdatedAt) : null;
   const lastSeenAt = cart?.lastSeenAt ? new Date(cart.lastSeenAt) : null;
-  const unread = Boolean(lastUpdatedAt && lastSeenAt && lastUpdatedAt > lastSeenAt);
+  const unread = Boolean(lastUpdatedAt && (!lastSeenAt || lastUpdatedAt > lastSeenAt));
 
   const flags = {
     hasPriceChanges: items.some((i) => Boolean(i.priceChanged)),
     hasOutOfStock: items.some((i) => Boolean(i.outOfStock)),
+    hasDeleted: items.some((i) => Boolean(i.isDeleted)),
   };
-  flags.hasIssues = flags.hasPriceChanges || flags.hasOutOfStock;
+  flags.hasIssues = flags.hasPriceChanges || flags.hasOutOfStock || flags.hasDeleted;
 
   return {
     cart: { items, subtotal, currency: CURRENCY, flags, lastUpdatedAt, lastSeenAt },
