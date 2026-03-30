@@ -1,21 +1,30 @@
 import { API_BASE_URL } from "./constants";
 
-export const normalizeId = (obj) => obj?._id || obj?.id || obj?.ID || "";
+export const normalizeId = (obj) =>
+  obj?._id || obj?.id || obj?.ID || "";
 
+/**
+ * ✅ FIXED: smarter + safer image resolver
+ */
 function resolveImageUrl(p, fallback = "/phone-placeholder.png") {
   if (!p || typeof p !== "string") return fallback;
 
-  // already full URL
-  if (p.startsWith("http://") || p.startsWith("https://")) return p;
+  const str = p.trim();
+  if (!str) return fallback;
 
-  // backend uploads
-  if (p.startsWith("/uploads/")) return `${API_BASE_URL}${p}`;
-  if (p.startsWith("uploads/")) return `${API_BASE_URL}/${p}`;
+  // ✅ already full URL (backend handled it)
+  if (str.startsWith("http://") || str.startsWith("https://")) {
+    return str;
+  }
 
-  // frontend public asset
-  if (p.startsWith("/")) return p;
+  // ✅ local uploads (only if backend DID NOT convert)
+  if (str.startsWith("/uploads/")) return `${API_BASE_URL}${str}`;
+  if (str.startsWith("uploads/")) return `${API_BASE_URL}/${str}`;
 
-  return p;
+  // ✅ frontend assets
+  if (str.startsWith("/")) return str;
+
+  return fallback;
 }
 
 const conditionLabel = {
@@ -61,7 +70,6 @@ export const normalizeDevice = (d, opts = {}) => {
     brand: d?.brand?.trim() || "Unknown Brand",
     price: Number(d?.price ?? 0),
 
-    // keys (for logic) + labels (for UI)
     conditionKey,
     condition: conditionLabel[conditionKey] || "Unknown",
 
@@ -70,84 +78,72 @@ export const normalizeDevice = (d, opts = {}) => {
 
     featured: Boolean(d?.featured),
 
-    // existing schema fields (safe defaults)
     feature: typeof d?.feature === "string" ? d.feature.trim() : "",
-    description: typeof d?.description === "string" ? d.description.trim() : "",
+    description:
+      typeof d?.description === "string" ? d.description.trim() : "",
 
     thumbnail: d?.thumbnail || "",
-    image: resolveImageUrl(rawImg, "/phone-placeholder.png"),
+
+    // ✅ FIX: guaranteed safe image
+    image: resolveImageUrl(rawImg),
   };
 
-  base.images = includeImages && Array.isArray(d?.images)
-    ? d.images.map((p) =>
-        resolveImageUrl(typeof p === "string" ? p : "", "/phone-placeholder.png")
-      )
-    : [];
+  // ✅ FIX: safe images array
+  base.images =
+    includeImages && Array.isArray(d?.images)
+      ? d.images
+          .map((p) => resolveImageUrl(p))
+          .filter(Boolean)
+      : [];
 
   if (includeRaw) base.raw = d;
 
   return base;
 };
 
+/**
+ * ✅ SIMPLIFIED + SAFE
+ */
 export const normalizeSlide = (s) => {
-  // Prefer new responsive fields if present
-  const rawDesktop =
-    s?.imageDesktopUrl ||
-    s?.imageDesktop ||
-    s?.imageUrl ||
+  const image =
     s?.image ||
-    s?.acf?.image ||
-    s?.acf?.image_url ||
-    s?.url ||
-    s?.source_url ||
-    s?.guid?.rendered ||
+    s?.imageUrl ||
+    s?.imageDesktop ||
+    s?.imageDesktopUrl ||
     "";
 
-  const rawMobile =
-    s?.imageMobileUrl ||
-    s?.imageMobile ||
+  const imageMobile = 
+    s?.imageMobile || 
+    s?.imageMobileUrl || 
     "";
-
-  const imageDesktopUrl = resolveImageUrl(rawDesktop, "");
-  const imageMobileUrl = resolveImageUrl(rawMobile, "");
 
   return {
     id: normalizeId(s),
 
-    // legacy (keep existing UI working)
-    imageUrl: imageDesktopUrl || resolveImageUrl(rawDesktop, ""),
+    imageUrl: resolveImageUrl(image, "/placeholder.png"),
+    imageDesktopUrl: resolveImageUrl(image, "/placeholder.png"),
+    imageMobileUrl: resolveImageUrl(
+      imageMobile,
+      ""
+    ),
 
-    // new responsive
-    imageDesktopUrl,
-    imageMobileUrl,
+    title: s?.title || "",
+    subtitle: s?.subtitle || "",
+    linkUrl: s?.linkUrl || "",
 
-    title: s?.title || s?.acf?.title || s?.title?.rendered || "",
-    subtitle: s?.subtitle || s?.acf?.subtitle || "",
-    linkUrl: s?.linkUrl || s?.acf?.link || "",
     raw: s,
   };
 };
 
-
 export const normalizeReview = (r) => {
   return {
     id: normalizeId(r),
-    name: r?.name || r?.acf?.name || r?.title?.rendered || "Anonymous",
-    email: r?.email || r?.acf?.email || "",
-    rating: Number(r?.rating ?? r?.acf?.rating ?? 5),
-    content:
-      r?.message ||
-      r?.content ||
-      r?.acf?.content ||
-      r?.content?.rendered ||
-      "",
-    avatarUrl:
-      r?.avatar ||
-      r?.avatarUrl ||
-      r?.acf?.avatar ||
-      r?.acf?.avatar_url ||
-      "",
-    createdAt: r?.createdAt || r?.date || "",
+    name: r?.name || "Anonymous",
+    email: r?.email || "",
+    rating: Number(r?.rating ?? 5),
+    content: r?.message || r?.content || "",
+    avatarUrl: resolveImageUrl(r?.avatar || ""),
+    createdAt: r?.createdAt || "",
     raw: r,
   };
 };
