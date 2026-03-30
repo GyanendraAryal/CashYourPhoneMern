@@ -21,7 +21,6 @@ function validateFile(file) {
     throw new Error("File too large");
   }
 
-  // extra extension check
   const ext = path.extname(file.originalname).toLowerCase();
   const allowedExt = [".jpg", ".jpeg", ".png", ".webp"];
 
@@ -31,46 +30,58 @@ function validateFile(file) {
 }
 
 /**
- * 🔒 Safe public URL generator
+ * 🌐 Safe public URL generator (FIXED)
  */
 export function toPublicUploadUrl(req, input) {
-  if (!req || !input) return "";
+  if (!input) return null;
 
   let str = "";
 
-  // normalize input safely
+  // normalize input
   if (typeof input === "string") {
     str = input;
   } else if (typeof input === "object" && input.url) {
     str = input.url;
   } else {
-    return "";
+    return null;
   }
 
   str = str.trim();
+  if (!str) return null;
 
-  const base = `${req.protocol}://${req.get("host")}`;
-
-  // external URL
+  // ✅ If already full URL → return as-is
   if (str.startsWith("http://") || str.startsWith("https://")) {
     return str;
   }
 
-  const normalized = str.replace(/\\/g, "/");
+  // ✅ Normalize slashes
+  const normalized = str.replace(/\\/g, "/").replace(/^\/+/, "");
 
-  if (normalized.startsWith("/uploads/")) return `${base}${normalized}`;
-  if (normalized.startsWith("uploads/")) return `${base}/${normalized}`;
+  // ✅ Cloudinary mode → assume already handled
+  if (isCloudinaryMode()) {
+    return normalized;
+  }
 
-  return `${base}/uploads/${normalized.replace(/^\/+/, "")}`;
+  // ✅ If req not available → fallback (prevents crashes)
+  if (!req) {
+    return `/uploads/${normalized}`;
+  }
+
+  const base = `${req.protocol}://${req.get("host")}`;
+
+  // ✅ Avoid double /uploads/
+  if (normalized.startsWith("uploads/")) {
+    return `${base}/${normalized}`;
+  }
+
+  return `${base}/uploads/${normalized}`;
 }
 
 /**
- * 🔐 Hardened Cloudinary upload
+ * ☁️ Hardened Cloudinary upload
  */
 export async function uploadToCloudinary(multerFile, { folder } = {}) {
-  if (!isCloudinaryMode()) {
-    return null;
-  }
+  if (!isCloudinaryMode()) return null;
 
   try {
     validateFile(multerFile);
@@ -85,7 +96,6 @@ export async function uploadToCloudinary(multerFile, { folder } = {}) {
     }
 
     return result.secure_url;
-
   } catch (err) {
     console.error("❌ Secure upload failed:", err.message);
     throw err;
