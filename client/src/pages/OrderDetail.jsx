@@ -265,9 +265,15 @@ export default function OrderDetail() {
                   return (
                     <div
                       key={idx}
-                      className="rounded-2xl border border-border-muted bg-white p-4"
+                      className="flex gap-4 rounded-2xl border border-border-muted bg-white p-4"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <img
+                        src={it?.thumbnail || "/phone-placeholder.png"}
+                        alt={it?.name || "Device"}
+                        className="h-16 w-16 md:h-20 md:w-20 rounded-xl object-cover border border-border-muted bg-surface-white-subtle"
+                        loading="lazy"
+                      />
+                      <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-extrabold text-text-primary">
                             {it?.name || "Device"}
