@@ -4,7 +4,7 @@ import Modal from "../components/Modal";
 import Field from "../components/Field";
 import api from "../lib/api";
 import { uploadSingle } from "../lib/upload";
-import AppImage from "../../../client/src/components/ui/AppImage";
+import AppImage from "../components/ui/AppImage";
 
 const ALLOWED_CONDITIONS = ["new", "like_new", "pre_owned", "refurbished"];
 const ALLOWED_AVAILABILITY = ["in_stock", "coming_soon", "out_of_stock"]; // cycle order
@@ -48,8 +48,8 @@ const Pill = ({ kind = "neutral", text }) => {
     kind === "availability"
       ? availabilityClass(text)
       : kind === "condition"
-      ? conditionClass(text)
-      : "bg-surface-white-subtle text-text-primary ring-1 ring-border-muted";
+        ? conditionClass(text)
+        : "bg-surface-white-subtle text-text-primary ring-1 ring-border-muted";
 
   return (
     <span
@@ -65,8 +65,8 @@ function PillBtn({ kind = "availability", text, onClick, disabled, title }) {
     kind === "availability"
       ? availabilityClass(text)
       : kind === "condition"
-      ? conditionClass(text)
-      : "bg-surface-white-subtle text-text-primary ring-1 ring-border-muted";
+        ? conditionClass(text)
+        : "bg-surface-white-subtle text-text-primary ring-1 ring-border-muted";
 
   return (
     <button
@@ -92,8 +92,8 @@ function Btn({ children, onClick, variant = "default", disabled }) {
     variant === "primary"
       ? "bg-primary-blue-active text-white hover:opacity-90"
       : variant === "danger"
-      ? "border border-primary-blue-muted bg-primary-blue-muted text-primary-blue-active hover:bg-primary-blue-muted"
-      : "border border-border-muted bg-white text-text-primary hover:bg-surface-white-subtle";
+        ? "border border-primary-blue-muted bg-primary-blue-muted text-primary-blue-active hover:bg-primary-blue-muted"
+        : "border border-border-muted bg-white text-text-primary hover:bg-surface-white-subtle";
   return (
     <button
       type="button"
@@ -204,20 +204,57 @@ export default function DevicesPage() {
   };
 
   const load = async ({ pageNext = page } = {}) => {
-    const params = {};
-    if (q) params.q = q;
-    params.page = pageNext;
-    params.limit = 20;
-    params.sort = q ? "relevance" : "newest";
+    try {
+      const params = {
+        page: pageNext,
+        limit: 20,
+        sort: q ? "relevance" : "newest",
+        ...(q ? { q } : {}),
+      };
 
-    const res = await api.get("/api/admin/devices", { params });
-    setItems(res.data?.items || []);
-    setPages(res.data?.pages || 1);
-    setPage(res.data?.page || pageNext);
+      const res = await api.get("/admin/devices", { params });
+      const data = res.data;
+
+      let list = [];
+      let currentPage = pageNext;
+      let totalPages = 1;
+
+      // ✅ Normalize ALL possible backend shapes safely
+      if (Array.isArray(data)) {
+        list = data;
+      }
+      else if (Array.isArray(data?.items)) {
+        list = data.items;
+        currentPage = data.page ?? pageNext;
+        totalPages = data.pages ?? 1;
+      }
+      else if (Array.isArray(data?.data?.items)) {
+        list = data.data.items;
+        currentPage = data.data.page ?? pageNext;
+        totalPages = data.data.pages ?? 1;
+      }
+      else if (Array.isArray(data?.data)) {
+        list = data.data;
+      }
+
+      // ✅ Always safe assignment
+      setItems(Array.isArray(list) ? list : []);
+      setPage(currentPage);
+      setPages(totalPages);
+
+      // 🔍 Debug (optional — remove later)
+      console.log("DEVICES LOADED:", list);
+
+    } catch (err) {
+      console.error("LOAD DEVICES ERROR:", err);
+      setItems([]);
+      setPage(1);
+      setPages(1);
+    }
   };
 
   useEffect(() => {
-    load().catch(() => {});
+    load().catch(() => { });
   }, []);
 
   const startCreate = () => {
@@ -227,31 +264,31 @@ export default function DevicesPage() {
     setOpen(true);
   };
 
-  const startEdit = (it) => {
+  const startEdit = (device) => {
     const normalizedCondition = safeEnum(
-      normalizeEnum(it?.condition),
+      normalizeEnum(device?.condition),
       ALLOWED_CONDITIONS,
       "new"
     );
 
     const normalizedAvailability = safeEnum(
-      normalizeEnum(it?.availability),
+      normalizeEnum(device?.availability),
       ALLOWED_AVAILABILITY,
       "in_stock"
     );
 
     setForm({
       ...empty,
-      ...it,
+      ...device,
       condition: normalizedCondition,
       availability: normalizedAvailability,
-      featured: Boolean(it?.featured),
-      price: Number(it?.price || 0),
-      images: Array.isArray(it?.images) ? it.images : [],
-      thumbnail: it?.thumbnail || "",
+      featured: Boolean(device?.featured),
+      price: Number(device?.price || 0),
+      images: Array.isArray(device?.images) ? device.images : [],
+      thumbnail: device?.thumbnail || "",
     });
 
-    setEditingId(it._id);
+    setEditingId(device._id);
     setErr("");
     setOpen(true);
   };
@@ -259,16 +296,21 @@ export default function DevicesPage() {
   const save = async () => {
     setBusy(true);
     setErr("");
+
     try {
       if (!form.name?.trim()) throw new Error("Name is required");
 
       const payload = buildPayload(form);
 
-      if (editingId) await api.put(`/api/admin/devices/${editingId}`, payload);
-      else await api.post("/api/admin/devices", payload);
+      if (editingId) {
+        await api.put(`/admin/devices/${editingId}`, payload);
+      } else {
+        await api.post("/admin/devices", payload);
+      }
 
       setOpen(false);
       await load();
+
     } catch (e) {
       setErr(e?.response?.data?.message || e.message || "Save failed");
     } finally {
@@ -282,7 +324,7 @@ export default function DevicesPage() {
     if (!deleteId) return;
     try {
       setDeleteLoading(true);
-      await api.delete(`/api/admin/devices/${deleteId}`);
+      await api.delete(`/admin/devices/${deleteId}`);
       setDeleteId(null);
       await load();
     } catch (e) {
@@ -308,18 +350,29 @@ export default function DevicesPage() {
   };
 
   const removeImageAt = (idx) => {
-    setForm((f) => ({
-      ...f,
-      images: (f.images || []).filter((_, i) => i !== idx),
-    }));
+    setForm((f) => {
+      const newImages = (f.images || []).filter((_, i) => i !== idx);
+      let newThumbnail = f.thumbnail;
+      
+      // If the removed image was the thumbnail, pick the next available one or empty
+      if (f.thumbnail === f.images?.[idx]) {
+        newThumbnail = newImages.length > 0 ? newImages[0] : "";
+      }
+      
+      return {
+        ...f,
+        images: newImages,
+        thumbnail: newThumbnail,
+      };
+    });
   };
 
   // ✅ Toggle featured directly in table
-  const toggleFeaturedRow = async (it, next) => {
+  const toggleFeaturedRow = async (device, next) => {
     try {
-      setRowBusyId(it._id);
-      const payload = buildPayload(it, { featured: next });
-      await api.put(`/api/admin/devices/${it._id}`, payload);
+      setRowBusyId(device._id);
+      const payload = buildPayload(device, { featured: next });
+      await api.put(`/admin/devices/${device._id}`, payload);
       await load();
     } catch (e) {
       alert(e?.response?.data?.message || e.message || "Update failed");
@@ -329,12 +382,12 @@ export default function DevicesPage() {
   };
 
   // ✅ Toggle availability directly in table (cycles)
-  const toggleAvailabilityRow = async (it) => {
-    const next = cycleAvailability(it.availability);
+  const toggleAvailabilityRow = async (device) => {
+    const next = cycleAvailability(device.availability);
     try {
-      setRowBusyId(it._id);
-      const payload = buildPayload(it, { availability: next });
-      await api.put(`/api/admin/devices/${it._id}`, payload);
+      setRowBusyId(device._id);
+      const payload = buildPayload(device, { availability: next });
+      await api.put(`/admin/devices/${device._id}`, payload);
       await load();
     } catch (e) {
       alert(e?.response?.data?.message || e.message || "Update failed");
@@ -366,7 +419,7 @@ export default function DevicesPage() {
             />
           </InputShell>
 
-          <Btn onClick={() => load().catch(() => {})} disabled={busy}>
+          <Btn onClick={() => load().catch(() => { })} disabled={busy}>
             Search
           </Btn>
 
@@ -396,48 +449,52 @@ export default function DevicesPage() {
             </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {items.map((it) => {
-                const avail = safeEnum(normalizeEnum(it.availability), ALLOWED_AVAILABILITY, "in_stock");
-                const cond = safeEnum(normalizeEnum(it.condition), ALLOWED_CONDITIONS, "new");
-                const rowDisabled = busy || rowBusyId === it._id;
+              {items.map((device) => {
+                const avail = safeEnum(normalizeEnum(device.availability), ALLOWED_AVAILABILITY, "in_stock");
+                const cond = safeEnum(normalizeEnum(device.condition), ALLOWED_CONDITIONS, "new");
+                const rowDisabled = busy || rowBusyId === device._id;
 
                 return (
-                  <tr key={it._id} className="hover:bg-surface-white-subtle/60">
+                  <tr key={device._id} className="hover:bg-surface-white-subtle/60">
                     <td className="p-4">
-                      {it.thumbnail ? (
-                        <AppImage
-                          src={device.imageUrl}
-                          className="h-10 w-10 rounded-xl object-cover ring-1 ring-border-muted"
-                          alt={device.name}
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-xl bg-surface-white-subtle ring-1 ring-border-muted" />
-                      )}
+                      {(() => {
+                        const imgSrc = device.thumbnail || device.images?.[0];
+
+                        return imgSrc ? (
+                          <AppImage
+                            src={imgSrc}
+                            className="h-10 w-10 rounded-xl object-cover ring-1 ring-border-muted"
+                            alt={device.name}
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-xl bg-surface-white-subtle ring-1 ring-border-muted" />
+                        );
+                      })()}
                     </td>
 
                     <td className="p-4">
-                      <div className="font-semibold text-text-primary">{it.name}</div>
+                      <div className="font-semibold text-text-primary">{device.name}</div>
                       <div className="mt-1 text-xs text-text-muted line-clamp-1">
-                        {it.feature || "-"}
+                        {device.feature || "-"}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <Pill kind="condition" text={cond} />
                       </div>
                     </td>
 
-                    <td className="p-4 text-text-primary">{it.brand || "-"}</td>
+                    <td className="p-4 text-text-primary">{device.brand || "-"}</td>
 
                     {/* ✅ Price formatted */}
                     <td className="p-4 font-semibold text-text-primary">
-                      {formatNpr(it.price)}
+                      {formatNpr(device.price)}
                     </td>
 
                     {/* ✅ Featured toggle */}
                     <td className="p-4">
                       <Toggle
-                        checked={Boolean(it.featured)}
+                        checked={Boolean(device.featured)}
                         disabled={rowDisabled}
-                        onChange={(next) => toggleFeaturedRow(it, next)}
+                        onChange={(next) => toggleFeaturedRow(device, next)}
                       />
                     </td>
 
@@ -448,16 +505,16 @@ export default function DevicesPage() {
                         text={avail}
                         disabled={rowDisabled}
                         title="Click to change availability"
-                        onClick={() => toggleAvailabilityRow(it)}
+                        onClick={() => toggleAvailabilityRow(device)}
                       />
                     </td>
 
                     <td className="p-4">
                       <div className="flex flex-wrap gap-2">
-                        <Btn onClick={() => startEdit(it)} disabled={rowDisabled}>
+                        <Btn onClick={() => startEdit(device)} disabled={rowDisabled}>
                           Edit
                         </Btn>
-                        <Btn variant="danger" onClick={() => askDelete(it._id)} disabled={rowDisabled}>
+                        <Btn variant="danger" onClick={() => askDelete(device._id)} disabled={rowDisabled}>
                           Delete
                         </Btn>
                       </div>
@@ -626,10 +683,11 @@ export default function DevicesPage() {
                 {(form.images || []).map((url, idx) => (
                   <div key={idx} className="relative">
                     <AppImage
-                      src={device.imageUrl}
+                      src={url}
                       className="h-16 w-16 object-cover rounded-xl ring-1 ring-border-muted"
-                      alt={device.name}
+                      alt="device"
                     />
+
                     <button
                       type="button"
                       className="absolute -top-2 -right-2 bg-white ring-1 ring-border-muted rounded-full w-7 h-7 text-xs font-bold hover:bg-surface-white-subtle"
