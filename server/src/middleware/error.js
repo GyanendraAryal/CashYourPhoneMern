@@ -13,6 +13,7 @@ export function notFound(req, res, next) {
  * - Returns a consistent error shape
  */
 export function errorHandler(err, req, res, next) {
+  console.error(`[ERROR HANDLER] ${req.method} ${req.url} - ${err.message}`);
   let status = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
 
   // Mongoose: invalid ObjectId
