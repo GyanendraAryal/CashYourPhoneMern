@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const CONDITION_ENUM = ["new", "like_new", "refurbished", "pre_owned"];
-const STATUS_ENUM = ["CREATED", "PAYMENT_PENDING", "PAID", "VERIFIED", "COMPLETED", "REJECTED"];
+const STATUS_ENUM = ["new", "contacted", "closed", "CREATED", "PAYMENT_PENDING", "PAID", "VERIFIED", "COMPLETED", "REJECTED"];
 
 const sellRequestSchema = new mongoose.Schema(
   {
@@ -58,7 +58,14 @@ const sellRequestSchema = new mongoose.Schema(
       },
     ],
 
-    status: { type: String, enum: STATUS_ENUM, default: "CREATED", index: true },
+    status: { type: String, enum: STATUS_ENUM, default: "new", index: true },
+
+    requestType: {
+      type: String,
+      enum: ["sell", "exchange"],
+      default: "sell",
+      index: true,
+    },
 
     isDeleted: { type: Boolean, default: false, index: true },
   },
