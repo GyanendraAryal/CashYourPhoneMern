@@ -5,6 +5,9 @@ import * as pricingService from "../modules/pricing/pricing.service.js";
 import Device from "../models/Device.js";
 
 const VALID_TRANSITIONS = {
+  new: ["contacted", "closed", "PAYMENT_PENDING", "REJECTED"],
+  contacted: ["closed", "PAYMENT_PENDING", "REJECTED"],
+  closed: [],
   CREATED: ["PAYMENT_PENDING", "REJECTED"],
   PAYMENT_PENDING: ["PAID", "REJECTED"],
   PAID: ["VERIFIED", "REJECTED"],
@@ -21,14 +24,25 @@ const CONDITION_MAP = {
 };
 
 export async function submitSellRequest(userId, payload, storedImages) {
-  const { fullName, phone, email, deviceName, deviceCondition, expectedPrice, notes } = payload;
+  const {
+    fullName,
+    phone,
+    email,
+    deviceName,
+    deviceCondition,
+    expectedPrice,
+    notes,
+    requestType,
+  } = payload;
 
   const normalizedCondition = CONDITION_MAP[deviceCondition?.toLowerCase()] || "new";
 
-  let mlPrice = 0, suggestedPrice = 0, mlConfidence = 0;
+  let mlPrice = 0,
+    suggestedPrice = 0,
+    mlConfidence = 0;
   try {
     const baseDevice = await Device.findOne({
-      name: { $regex: new RegExp(`^${deviceName.trim()}$`, "i") }
+      name: { $regex: new RegExp(`^${deviceName.trim()}$`, "i") },
     });
 
     if (baseDevice) {
@@ -53,12 +67,15 @@ export async function submitSellRequest(userId, payload, storedImages) {
     deviceName: String(deviceName).trim(),
     deviceCondition: normalizedCondition,
     expectedPrice: Number(expectedPrice) || 0,
+    requestType: ["sell", "exchange"].includes(requestType)
+      ? requestType
+      : "sell",
     mlPrice,
     suggestedPrice,
     mlConfidence,
     notes: notes ? String(notes).trim() : "",
     images: storedImages,
-    status: "CREATED",
+    status: "new",
   });
 
   // Background Admin Notification
