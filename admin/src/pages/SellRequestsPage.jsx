@@ -23,6 +23,21 @@ const Badge = ({ status }) => (
   </span>
 );
 
+const TypeBadge = ({ type }) => {
+  const isExchange = type === "exchange";
+  const cls = isExchange
+    ? "bg-purple-100 text-purple-700 ring-1 ring-purple-200"
+    : "bg-amber-100 text-amber-700 ring-1 ring-amber-200";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}
+    >
+      {isExchange ? "🔄 Exchange" : "💰 Sell"}
+    </span>
+  );
+};
+
 const stripStorage = (name = "") =>
   String(name)
     .replace(/\b\d+\s?(GB|TB)\b/gi, "")
@@ -106,6 +121,9 @@ export default function SellRequestsPage() {
     () => items.find((x) => x._id === deleteId) || null,
     [items, deleteId]
   );
+
+  // gallery modal
+  const [galleryImages, setGalleryImages] = useState(null);
 
   const load = async () => {
     try {
@@ -254,8 +272,10 @@ export default function SellRequestsPage() {
               <tr className="text-text-primary">
                 <th className="p-4">Customer</th>
                 <th className="p-4">Device</th>
+                <th className="p-4 w-28">Type</th>
                 <th className="p-4 w-36">Expected Price</th>
                 <th className="p-4 w-40">Intelligence</th>
+                <th className="p-4 w-24">Photos</th>
                 <th className="p-4 w-32">Status</th>
                 <th className="p-4 w-56">Created</th>
                 <th className="p-4 w-[340px]">Actions</th>
@@ -292,7 +312,11 @@ export default function SellRequestsPage() {
                       <div className="mt-0.5 text-xs text-text-muted">
                         {it.deviceCondition ? formatCondition(it.deviceCondition) : "-"}
                       </div>
+                    </td>
 
+                    {/* Type */}
+                    <td className="p-4">
+                      <TypeBadge type={it.requestType} />
                     </td>
 
                     {/* Price */}
@@ -318,6 +342,30 @@ export default function SellRequestsPage() {
                         </div>
                       ) : (
                         <span className="text-text-muted italic text-xs">No guidance</span>
+                      )}
+                    </td>
+
+                    {/* Photos */}
+                    <td className="p-4">
+                      {it.images?.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setGalleryImages(it.images)}
+                          className="group relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-surface-white-subtle ring-1 ring-border-muted transition hover:ring-primary-blue-active"
+                        >
+                          <img
+                            src={it.images[0]}
+                            alt="Device"
+                            className="h-full w-full object-cover opacity-60 transition group-hover:scale-110 group-hover:opacity-100"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-text-primary group-hover:hidden">
+                            +{it.images.length}
+                          </div>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                          None
+                        </span>
                       )}
                     </td>
 
@@ -401,7 +449,6 @@ export default function SellRequestsPage() {
                 {deletingItem.deviceCondition
                   ? `(${formatCondition(deletingItem.deviceCondition)})`
                   : ""}
-
               </span>
             </>
           ) : null}
@@ -418,6 +465,37 @@ export default function SellRequestsPage() {
           <Btn variant="danger" onClick={doDelete} disabled={deleteLoading}>
             {deleteLoading ? "Deleting..." : "Delete"}
           </Btn>
+        </div>
+      </Modal>
+
+      {/* Image Gallery Modal */}
+      <Modal
+        open={Boolean(galleryImages)}
+        title="Device Photos"
+        onClose={() => setGalleryImages(null)}
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {galleryImages?.map((url, idx) => (
+            <a
+              key={idx}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="group relative aspect-square overflow-hidden rounded-2xl border border-border-muted bg-surface-white-subtle"
+            >
+              <img
+                src={url}
+                alt={`Device ${idx + 1}`}
+                className="h-full w-full object-contain transition group-hover:scale-105"
+              />
+              <div className="absolute bottom-2 right-2 rounded-lg bg-black/50 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+                View Full Size
+              </div>
+            </a>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end">
+          <Btn onClick={() => setGalleryImages(null)}>Close Gallery</Btn>
         </div>
       </Modal>
     </Shell>
