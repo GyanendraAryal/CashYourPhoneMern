@@ -41,6 +41,7 @@ export default function Sell() {
     price: "",
     name: "",
     phone: "",
+    requestType: "sell", // "sell" | "exchange"
   });
 
   const [images, setImages] = useState([]);
@@ -54,7 +55,13 @@ export default function Sell() {
 
   const handleImages = (e) => {
     const files = Array.from(e.target.files || []);
+    // Validation: prevent duplicate files or excessive counts if needed
+    // For now, we append to existing or replace? Let's REPLACE to match previous behavior but add preview
     setImages(files);
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e) => {
@@ -91,6 +98,8 @@ export default function Sell() {
 
       if (form.price) formData.append("expectedPrice", String(form.price));
 
+      formData.append("requestType", form.requestType);
+
       // ✅ Images field name MUST be "images"
       images.forEach((f) => formData.append("images", f));
 
@@ -106,6 +115,7 @@ export default function Sell() {
           price: "",
           name: "",
           phone: "",
+          requestType: "sell",
         });
         setImages([]);
       } else {
@@ -182,6 +192,27 @@ export default function Sell() {
             onSubmit={handleSubmit}
             className="mt-6 rounded-2xl border border-border-muted bg-white p-6 shadow-sm md:p-8"
           >
+            {/* Goal Toggle */}
+            <div className="mb-8">
+              <FieldLabel required>I want to</FieldLabel>
+              <div className="flex gap-3">
+                {["sell", "exchange"].map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, requestType: type }))}
+                    className={`flex-1 rounded-2xl border py-4 text-sm font-bold transition-all ${
+                      form.requestType === type
+                        ? "border-primary-blue-active bg-primary-blue-muted/30 text-primary-blue-active shadow-[0_0_0_1px_rgba(37,99,235,1)]"
+                        : "border-border-muted bg-white text-text-muted hover:bg-surface-white-subtle"
+                    }`}
+                  >
+                    {type === "sell" ? "💰 Sell for Cash" : "🔄 Exchange Phone"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid gap-5 md:grid-cols-2">
               {/* Brand */}
               <div>
@@ -327,12 +358,39 @@ export default function Sell() {
                   </div>
 
                   {images.length > 0 ? (
-                    <div className="mt-3 text-xs text-text-muted">
-                      Selected:{" "}
-                      <span className="font-semibold text-text-primary">
-                        {images.length}
-                      </span>{" "}
-                      file{images.length > 1 ? "s" : ""}
+                    <div className="mt-4">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {images.map((file, idx) => {
+                          const url = URL.createObjectURL(file);
+                          return (
+                            <div
+                              key={idx}
+                              className="group relative aspect-square overflow-hidden rounded-xl border border-border-muted bg-white"
+                            >
+                              <img
+                                src={url}
+                                alt="Preview"
+                                className="h-full w-full object-cover"
+                                onLoad={() => URL.revokeObjectURL(url)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(idx)}
+                                className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-sm font-bold text-text-primary shadow-sm hover:bg-white"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 text-xs text-text-muted">
+                        Selected:{" "}
+                        <span className="font-semibold text-text-primary">
+                          {images.length}
+                        </span>{" "}
+                        file{images.length > 1 ? "s" : ""}
+                      </div>
                     </div>
                   ) : (
                     <div className="mt-3 text-xs text-text-muted">
@@ -348,9 +406,13 @@ export default function Sell() {
               <button
                 type="submit"
                 disabled={submitting || booting || !user}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-[var(--brand-dark)] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-60 active:scale-[0.99]"
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-60 active:scale-[0.99]"
               >
-                {submitting ? "Submitting..." : "Submit Sell Request"}
+                {submitting
+                  ? "Submitting..."
+                  : form.requestType === "sell"
+                  ? "Submit Sell Request"
+                  : "Submit Exchange Request"}
               </button>
 
               {message ? (
