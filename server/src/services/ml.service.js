@@ -24,27 +24,30 @@ class MLService {
       throw new Error("Invalid base price");
     }
 
-    const allowedConditions = ["poor", "fair", "good", "excellent"];
-    if (!allowedConditions.includes(condition)) {
-      throw new Error("Invalid condition");
+    const allowedConditions = ["brand_new", "like_new", "good", "fair", "broken"];
+    const normalizedCondition = condition.toLowerCase().replace(" ", "_");
+    
+    if (!allowedConditions.includes(normalizedCondition)) {
+      throw new Error(`Invalid condition: ${condition}`);
     }
 
     // Clamp price to safe bounds
-    const clampedPrice = Math.min(Math.max(basePrice, 500), 500000);
+    const clampedPrice = Math.min(Math.max(basePrice, 500), 1000000);
 
-    return { basePrice: clampedPrice, condition };
+    return { basePrice: clampedPrice, condition: normalizedCondition };
   }
 
   // 🧠 Rule-based fallback (CRITICAL)
   fallbackPrice(basePrice, condition) {
     const multipliers = {
-      poor: 0.4,
-      fair: 0.6,
-      good: 0.75,
-      excellent: 0.9,
+      brand_new: 1.0,
+      like_new: 0.9,
+      good: 0.8,
+      fair: 0.7,
+      broken: 0.4,
     };
 
-    return Math.round(basePrice * (multipliers[condition] || 0.6));
+    return Math.round(basePrice * (multipliers[condition] || 0.7));
   }
 
   /**
