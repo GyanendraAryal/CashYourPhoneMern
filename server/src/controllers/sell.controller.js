@@ -20,18 +20,10 @@ export async function createSellRequest(req, res, next) {
       return res.status(400).json({ message: "fullName, phone, and deviceName are required." });
     }
     
-    // Parse uploaded files
-    const files = req.files || [];
-    let storedImages = [];
-    if (files.length) {
-      if (isCloudinaryMode()) {
-        const results = await Promise.all(
-          files.map((f) => uploadToCloudinary(f, { folder: "sell" }))
-        );
-        storedImages = results.filter(Boolean);
-      } else {
-        storedImages = files.map((f) => toStoredUploadPath(f.path));
-      }
+    // The upload middleware puts processed URLs in req.body.images
+    let storedImages = req.body.images || [];
+    if (!Array.isArray(storedImages)) {
+      storedImages = [storedImages];
     }
 
     const doc = await sellService.submitSellRequest(req.user.id, req.body, storedImages);
