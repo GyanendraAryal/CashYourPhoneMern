@@ -7,7 +7,8 @@ export const getPricingConfig = async (req, res, next) => {
       config = {
         value: {
           weights: { new: 1.0, like_new: 0.9, refurbished: 0.8, pre_owned: 0.7 },
-          useML: true
+          useML: true,
+          margin: 0.1
         }
       };
     }
@@ -19,10 +20,10 @@ export const getPricingConfig = async (req, res, next) => {
 
 export const updatePricingConfig = async (req, res, next) => {
   try {
-    const { weights, useML } = req.body;
+    const { weights, useML, margin } = req.body;
     const config = await GlobalConfig.findOneAndUpdate(
       { key: "pricing_config" },
-      { value: { weights, useML } },
+      { value: { weights, useML, margin } },
       { upsert: true, new: true }
     );
     res.json({ status: "success", data: config.value });
