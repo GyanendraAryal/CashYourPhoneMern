@@ -41,6 +41,12 @@ export default function ProductDetail() {
   }, [product?.availabilityKey, product?.availability]);
 
   const onAddToCart = useCallback(async () => {
+    if (!user) {
+      toast("Please login to add items to your cart", { icon: "🔐" });
+      nav(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
     if (!product?._id && !product?.id) {
       toast.error("Product not loaded");
       return;
@@ -66,7 +72,7 @@ export default function ProductDetail() {
     } finally {
       setAdding(false);
     }
-  }, [product, addToCart]);
+  }, [user, product, addToCart, nav]);
 
   const onBuyNow = useCallback(async () => {
     try {
