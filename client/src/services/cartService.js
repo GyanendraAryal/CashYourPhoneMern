@@ -3,13 +3,13 @@ import api from "../lib/api";
 /**
  * Response normalizer:
  * Supports common backend shapes:
- * 1) { cart: { items, subtotal, currency }, count }
- * 2) { items, subtotal, currency } (raw cart)
+ * 1) { cart: { items, total, currency }, count }
+ * 2) { items, total, currency } (raw cart)
  * 3) { cart: rawCart } with no count
  */
 function normalizeCartResponse(res) {
   const data = res?.data || {};
-  const cart = data.cart || data || { items: [], subtotal: 0, currency: "NPR" };
+  const cart = data.cart || data || { items: [], total: 0, currency: "NPR" };
 
   const items = Array.isArray(cart?.items) ? cart.items : [];
   const count =
@@ -61,12 +61,6 @@ export async function removeCartItem(itemId) {
   return { ...res, data: { ...res.data, ...norm } };
 }
 
-export async function mergeCart(items) {
-  const res = await api.post("/api/v1/cart/merge", { items });
-  const norm = normalizeCartResponse(res);
-  return { ...res, data: { ...res.data, ...norm } };
-}
-
 export async function clearCart() {
   const res = await api.delete("/api/v1/cart");
   try {
@@ -79,6 +73,12 @@ export async function clearCart() {
 
 export async function markCartSeen() {
   const res = await api.post("/api/v1/cart/mark-seen");
+  const norm = normalizeCartResponse(res);
+  return { ...res, data: { ...res.data, ...norm } };
+}
+
+export async function syncCartPrices() {
+  const res = await api.post("/api/v1/cart/sync-prices");
   const norm = normalizeCartResponse(res);
   return { ...res, data: { ...res.data, ...norm } };
 }
