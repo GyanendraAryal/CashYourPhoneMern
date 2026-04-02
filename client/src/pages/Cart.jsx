@@ -59,8 +59,10 @@ export default function Cart() {
     updateCartItem,
     removeCartItem,
     clearCart,
+    syncPrices,
   } = useCart();
 
+  const [syncing, setSyncing] = useState(false);
   const [busyId, setBusyId] = useState(null);
 
   // ✅ Mark cart as seen on page view (server-truth)
@@ -77,7 +79,7 @@ export default function Cart() {
   }, []);
 
   const items = cart?.items || [];
-  const subtotal = Number(cart?.subtotal || 0);
+  const total = Number(cart?.total || 0);
   const currency = cart?.currency || "NPR";
 
   const hasItems = items.length > 0;
@@ -141,6 +143,19 @@ export default function Cart() {
     }
   };
 
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await syncPrices();
+      toast.success("Prices updated to match current catalog.");
+    } catch (e) {
+      toast.error(e?.message || "Failed to sync prices.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const goCheckout = () => {
     if (!hasItems) return;
 
@@ -190,6 +205,33 @@ export default function Cart() {
           )}
         </div>
       </div>
+
+      {/* Price Alert Banner */}
+      {user && cart?.flags?.hasPriceChanges && (
+        <div className="mb-6 rounded-2xl border border-yellow-200 bg-yellow-50 p-4 transition-all animate-in slide-in-from-top-4 duration-500">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-yellow-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-bold text-yellow-900 text-sm">Price updates detected</h3>
+                <p className="text-yellow-700 text-xs mt-0.5">Some items in your cart have new prices in our catalog. Tap sync to update.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing}
+              className="w-full sm:w-auto px-6 py-2 rounded-xl bg-yellow-700 text-white font-bold text-sm shadow-sm hover:bg-yellow-800 transition-all active:scale-95 disabled:opacity-60"
+            >
+              {syncing ? "Syncing..." : "Sync Cart Prices"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {!user ? (
         <div className="rounded-2xl border border-border-muted bg-white p-12 text-center shadow-sm">
@@ -259,7 +301,12 @@ export default function Cart() {
                   const qty = Number(it.qty || 0);
                   const unitPrice = Number(it.unitPrice || 0);
                   const lineTotal = Number(it.lineTotal || unitPrice * qty);
-                  const disabled = busyId === lineId;
+                  const maxQty = Number(it.maxQty || 5);
+                  const isBusy = busyId === lineId;
+                  // Disable +/- when request is in flight OR the item is unavailable
+                  const canOrder = it.isOrderable !== false && !it.isDeleted;
+                  const disabled = isBusy || !canOrder;
+                  const disableInc = isBusy || !canOrder || qty >= maxQty;
 
                   return (
                     <div
@@ -318,7 +365,7 @@ export default function Cart() {
                               type="button"
                               onClick={() => onDec(it)}
                               disabled={disabled}
-                              className="h-8 w-8 rounded-lg hover:bg-surface-white-subtle font-bold"
+                              className="h-8 w-8 rounded-lg hover:bg-surface-white-subtle font-bold disabled:opacity-40"
                             >
                               −
                             </button>
@@ -326,8 +373,8 @@ export default function Cart() {
                             <button
                               type="button"
                               onClick={() => onInc(it)}
-                              disabled={disabled}
-                              className="h-8 w-8 rounded-lg hover:bg-surface-white-subtle font-bold"
+                              disabled={disableInc}
+                              className="h-8 w-8 rounded-lg hover:bg-surface-white-subtle font-bold disabled:opacity-40"
                             >
                               +
                             </button>
@@ -358,7 +405,7 @@ export default function Cart() {
                           <button
                             type="button"
                             onClick={() => onInc(it)}
-                            disabled={disabled}
+                            disabled={disableInc}
                             className="h-9 w-9 rounded-lg hover:bg-primary-blue-muted/20 text-text-primary transition-colors font-bold disabled:opacity-40"
                           >
                             +
@@ -393,9 +440,9 @@ export default function Cart() {
 
               <div className="mt-6 space-y-4">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-muted font-medium">Bag Subtotal</span>
+                  <span className="text-text-muted font-medium">Bag Total</span>
                   <span className="font-bold text-text-primary">
-                    {currency} {money(subtotal)}
+                    {currency} {money(total)}
                   </span>
                 </div>
 
@@ -405,7 +452,7 @@ export default function Cart() {
                   <span className="text-text-primary font-bold">Total Amount</span>
                   <div className="text-right">
                     <div className="text-xl font-black text-primary-blue-active">
-                      {currency} {money(subtotal)}
+                      {currency} {money(total)}
                     </div>
                     <div className="text-[10px] text-text-muted uppercase font-bold tracking-wider">Including VAT</div>
                   </div>
@@ -439,7 +486,7 @@ export default function Cart() {
             <div>
               <div className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Total</div>
               <div className="text-xl font-black text-primary-blue-active leading-none">
-                {currency} {money(subtotal)}
+                {currency} {money(total)}
               </div>
             </div>
             <button
