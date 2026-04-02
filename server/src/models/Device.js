@@ -15,7 +15,7 @@ const deviceSchema = new mongoose.Schema(
     slug: {
       type: String,
       unique: true,
-      index: true,
+      // NOTE: unique: true already creates an index — do not add index: true here
     },
 
     brand: {
