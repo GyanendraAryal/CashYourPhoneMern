@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Shell from "../components/Shell";
 import Modal from "../components/Modal";
 import api from "../lib/api";
+import PaymentVerification from "../components/payments/PaymentVerification";
+import toast from "react-hot-toast";
 
 const statusStyles = {
   initiated: "bg-primary-blue-muted text-primary-blue-active ring-1 ring-primary-blue-muted",
@@ -246,6 +248,16 @@ export default function PaymentsPage() {
                   <div className="text-sm">Status: {order.status}</div>
                   <div className="text-sm">Total: {order.total} {order.currency || "NPR"}</div>
                 </div>
+              )}
+
+              {active.provider === "esewa" && active.status !== "succeeded" && (
+                <PaymentVerification 
+                  paymentId={active._id} 
+                  onVerified={(updated) => {
+                    setActive(updated);
+                    setItems(items.map(it => it._id === updated._id ? updated : it));
+                  }}
+                />
               )}
             </div>
           )}
