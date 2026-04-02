@@ -77,6 +77,12 @@ export default function ProductCard({ product, index = 0 }) {
     const thumbnail = pickPrimaryImage(product);
     const unitPriceSnapshot = Number(product?.price || 0);
 
+    if (!user) {
+      toast("Please login to add items to your cart", { icon: "🔐" });
+      nav(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
     try {
       setAdding(true);
       await addToCart(id, 1, {
