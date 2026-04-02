@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(requireAdmin);
 
+router.get("/config", pricingController.getPricingConfig);
 router.patch("/config", pricingController.updatePricingConfig);
 
 export default router;
