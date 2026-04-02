@@ -54,7 +54,7 @@ export async function buildCartResponse(req, userId) {
     const latest = Number(p.price || 0);
 
     return {
-      // ✅ contract: cart line item id
+      // ✅ contract: cart line item id (the subdocument _id, not the product _id)
       id: String(it._id || p._id || it.product),
 
       deviceId: String(p._id || it.product),
@@ -64,7 +64,7 @@ export async function buildCartResponse(req, userId) {
       maxQty: MAX_QTY,
 
       nameSnapshot: it.nameSnapshot || p.name || "Unknown Device",
-      thumbnailSnapshot: toPublicUploadUrl(req, 
+      thumbnailSnapshot: toPublicUploadUrl(req,
         p.thumbnail ||
         (Array.isArray(p.images) && p.images.length ? p.images[0] : "") ||
         "/phone-placeholder.png"
@@ -76,13 +76,15 @@ export async function buildCartResponse(req, userId) {
 
       outOfStock,
       isDeleted: !pExist,
+      // ✅ isOrderable: false when item can't be ordered (deleted or out of stock)
+      isOrderable: pExist && !outOfStock,
 
       unitPrice: unit,
       lineTotal,
     };
   });
 
-  const subtotal = items.reduce((sum, it) => sum + Number(it.lineTotal || 0), 0);
+  const total = items.reduce((sum, it) => sum + Number(it.lineTotal || 0), 0);
   const count = items.reduce((sum, it) => sum + Number(it.qty || 0), 0);
 
   const lastUpdatedAt = cart?.lastUpdatedAt ? new Date(cart.lastUpdatedAt) : null;
@@ -97,7 +99,7 @@ export async function buildCartResponse(req, userId) {
   flags.hasIssues = flags.hasPriceChanges || flags.hasOutOfStock || flags.hasDeleted;
 
   return {
-    cart: { items, subtotal, currency: CURRENCY, flags, lastUpdatedAt, lastSeenAt },
+    cart: { items, total, currency: CURRENCY, flags, lastUpdatedAt, lastSeenAt },
     count,
     unread,
   };
@@ -161,7 +163,7 @@ export async function loadDeviceOrThrow(productId) {
 
 export function emptyCartPayload() {
   return {
-    cart: { items: [], subtotal: 0, currency: CURRENCY, flags: { hasPriceChanges: false, hasOutOfStock: false, hasIssues: false }, lastUpdatedAt: null, lastSeenAt: null },
+    cart: { items: [], total: 0, currency: CURRENCY, flags: { hasPriceChanges: false, hasOutOfStock: false, hasIssues: false }, lastUpdatedAt: null, lastSeenAt: null },
     count: 0,
     unread: false,
   };
