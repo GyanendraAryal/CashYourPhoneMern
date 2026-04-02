@@ -34,8 +34,15 @@ export const createOrder = async (userId, contactData, session) => {
 
   const cart = await Cart.findOne({ user: userId }).session(session);
 
-  if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
-    throw new AppError("Cart is empty", 400);
+  if (!cart) {
+    console.error(`[OrderService] Cart document NOT FOUND for user: ${userId}`);
+    throw new AppError("Cart not found. Please add items to your cart first.", 400);
+  }
+
+  if (!Array.isArray(cart.items) || cart.items.length === 0) {
+    console.error(`[OrderService] Cart is EMPTY for user: ${userId} (Cart ID: ${cart._id})`);
+    // Diagnostic: check if user has other carts (shouldn't happen with unique index)
+    throw new AppError("Your cart is empty. Please add items to your cart before placing an order.", 400);
   }
 
   const productIds = cart.items.map((it) => it.product).filter(Boolean);
@@ -81,11 +88,17 @@ export const createOrder = async (userId, contactData, session) => {
 
   // Atomic Inventory Decrement
   for (const item of items) {
-    await Device.updateOne(
+    const res = await Device.updateOne(
       { _id: item.product, quantity: { $gte: item.qty } },
       { $inc: { quantity: -item.qty } },
       { session }
     );
+
+    // ✅ Enforce strict atomic reservation
+    if (res.modifiedCount === 0) {
+      console.error(`[CHECKOUT FAIL] Concurrent checkout race condition: Insufficient stock for ${item.name} (User: ${userId})`);
+      throw new AppError(`Sorry, another user just purchased ${item.name} and it is now out of stock. Please adjust your cart.`, 400);
+    }
   }
 
   const orderNumber = await genSequentialOrderNumber(session);
@@ -132,7 +145,7 @@ export const getUserOrders = async (userId, req) => {
 /**
  * GET order by ID
  */
-export const getOrder = async (orderId, userId) => {
+export const getOrder = async (orderId, userId, req) => {
   const order = await Order.findById(orderId);
   if (!order || !order.user.equals(userId)) {
     throw new AppError("Order not found", 404);
@@ -148,19 +161,49 @@ export const getOrder = async (orderId, userId) => {
 };
 
 /**
+ * ADMIN: Restore inventory for cancelled items
+ */
+export async function restoreOrderInventory(items, session) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  
+  for (const item of items) {
+    if (!item.product || !item.qty) continue;
+    await Device.updateOne(
+      { _id: item.product },
+      { $inc: { quantity: item.qty } },
+      { session }
+    );
+  }
+}
+
+/**
  * CANCEL order
  */
 export const cancelUserOrder = async (orderId, userId) => {
-  const order = await Order.findById(orderId);
-  if (!order || !order.user.equals(userId)) {
-    throw new AppError("Order not found", 404);
-  }
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const order = await Order.findById(orderId).session(session);
+    if (!order || !order.user.equals(userId)) {
+      throw new AppError("Order not found", 404);
+    }
 
-  if (order.status !== "created") {
-    throw new AppError("Order cannot be cancelled in its current state", 400);
-  }
+    if (order.status !== "created") {
+      throw new AppError("Order cannot be cancelled in its current state", 400);
+    }
 
-  order.status = "cancelled";
-  await order.save();
-  return order;
+    order.status = "cancelled";
+    await order.save({ session });
+
+    // Restore stock
+    await restoreOrderInventory(order.items, session);
+
+    await session.commitTransaction();
+    return order;
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 };
