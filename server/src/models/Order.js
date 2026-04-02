@@ -16,7 +16,8 @@ const OrderItemSchema = new mongoose.Schema(
 
 const OrderSchema = new mongoose.Schema(
   {
-    orderNumber: { type: String, unique: true, index: true },
+    orderNumber: { type: String, unique: true },
+    // NOTE: unique: true already creates an index — do not add index: true here
 
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
 
