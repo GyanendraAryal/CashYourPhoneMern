@@ -1,29 +1,37 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAuth } from "./AuthContext";
 import {
   addToCart as addToCartApi,
   clearCart as clearCartApi,
   getCart,
   markCartSeen,
-  mergeCart as mergeCartApi,
   removeCartItem as removeCartItemApi,
   updateCartItem as updateCartItemApi,
+  syncCartPrices as syncCartPricesApi,
 } from "../services/cartService";
 
 const CartContext = createContext(null);
 
 const EMPTY = {
   items: [],
-  subtotal: 0,
+  total: 0,
   currency: "NPR",
   flags: { hasPriceChanges: false, hasOutOfStock: false, hasIssues: false },
   lastUpdatedAt: null,
   lastSeenAt: null,
 };
 
-const GUEST_KEY = "cyp_guest_cart_v1";
 const MAX_QTY = 5;
 
+// Normalize variant fields — used for consistent API payloads
 function normVariant(v) {
   const vv = v || {};
   return {
@@ -33,95 +41,19 @@ function normVariant(v) {
   };
 }
 
-function variantKey(v) {
-  const x = normVariant(v);
-  return `${x.storage}|${x.color}|${x.condition}`.toLowerCase();
-}
-
-function guestItemId(deviceId, variant) {
-  return `${String(deviceId)}|${variantKey(variant)}`;
-}
-
-function clampQty(qty) {
-  const n = Number(qty || 1);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(MAX_QTY, Math.max(1, Math.floor(n)));
-}
-
-function loadGuestItems() {
-  try {
-    const raw = localStorage.getItem(GUEST_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveGuestItems(items) {
-  try {
-    localStorage.setItem(GUEST_KEY, JSON.stringify(items));
-  } catch {
-    // ignore
-  }
-}
-
-function buildGuestCart(items) {
-  const safe = Array.isArray(items) ? items : [];
-  const subtotal = safe.reduce((sum, it) => {
-    const qty = clampQty(it?.qty);
-    const unit = Number(it?.unitPriceSnapshot || 0);
-    return sum + unit * qty;
-  }, 0);
-
-  const count = safe.reduce((sum, it) => sum + clampQty(it?.qty), 0);
-
-  return {
-    cart: {
-      ...EMPTY,
-      items: safe.map((it) => {
-        const qty = clampQty(it?.qty);
-        const unit = Number(it?.unitPriceSnapshot || 0);
-        return {
-          id: String(it?.id || guestItemId(it?.deviceId, it?.variant)),
-          deviceId: String(it?.deviceId || ""),
-          variant: normVariant(it?.variant),
-          qty,
-          maxQty: MAX_QTY,
-
-          nameSnapshot: String(it?.nameSnapshot || "Device"),
-          thumbnailSnapshot: String(it?.thumbnailSnapshot || "/phone-placeholder.png"),
-
-          unitPriceSnapshot: unit,
-          latestUnitPrice: unit,
-          priceChanged: false,
-
-          outOfStock: false,
-
-          unitPrice: unit,
-          lineTotal: unit * qty,
-        };
-      }),
-      subtotal,
-      currency: "NPR",
-      flags: { hasPriceChanges: false, hasOutOfStock: false, hasIssues: false },
-      lastUpdatedAt: null,
-      lastSeenAt: null,
-    },
-    count,
-    unread: false,
-  };
-}
-
 export function CartProvider({ children }) {
-  const { user } = useAuth();
+  const { user, booting } = useAuth();
 
   const [cart, setCart] = useState(EMPTY);
   const [count, setCount] = useState(0);
   const [cartUnread, setCartUnread] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const mergedOnceRef = useRef(false);
+  // Keep stable refs for user/booting so callbacks don't go stale
+  const userRef = useRef(user);
+  const bootingRef = useRef(booting);
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { bootingRef.current = booting; }, [booting]);
 
   function setFromResponse(res) {
     const data = res?.data || {};
@@ -139,71 +71,63 @@ export function CartProvider({ children }) {
     else setCartUnread(false);
   }
 
-  const refreshCart = async () => {
-    // Guest cart (localStorage)
-    if (!user) {
-      const guestItems = loadGuestItems();
-      const res = buildGuestCart(guestItems);
-      setFromResponse({ data: res });
-      return;
+  // ✅ Stable callback: reads user/booting from refs so [] deps is correct.
+  // This prevents cascading re-renders on every consumer when user/booting change.
+  const fetchCart = useCallback(async () => {
+    if (bootingRef.current) return EMPTY;
+    if (!userRef.current) {
+      setCart(EMPTY);
+      setCount(0);
+      setCartUnread(false);
+      return EMPTY;
     }
 
     setLoading(true);
+    // NOTE: Do NOT setCart(EMPTY) here — it causes a flash of empty cart + stuck-empty
+    // state if the follow-up GET fails. The loading indicator is sufficient feedback.
     try {
       const res = await getCart();
       setFromResponse(res);
+      const data = res?.data || {};
+      return data?.cart || EMPTY;
+    } catch (e) {
+      console.error("[CartContext] Refresh failed:", e);
+      // Keep showing whatever cart was already loaded — don't wipe on a failed refresh
+      return EMPTY;
     } finally {
       setLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Merge guest -> server exactly once after login
+  // Sync cart with authenticated user session
   useEffect(() => {
     (async () => {
-      if (!user?.id) {
-        mergedOnceRef.current = false;
-        await refreshCart();
+      if (booting) return;
+      if (!user) {
+        setCart(EMPTY);
+        setCount(0);
+        setCartUnread(false);
         return;
       }
-
-      // If guest items exist, merge once per login session
-      if (!mergedOnceRef.current) {
-        const guestItems = loadGuestItems();
-        if (guestItems.length) {
-          try {
-            mergedOnceRef.current = true;
-            const mergePayload = guestItems.map((it) => ({
-              deviceId: String(it.deviceId),
-              qty: clampQty(it.qty),
-              variant: normVariant(it.variant),
-            }));
-            const res = await mergeCartApi(mergePayload);
-            saveGuestItems([]); // clear guest cart after merge
-            setFromResponse(res);
-            return;
-          } catch {
-            // If merge fails, fall back to server cart fetch
-          }
-        }
-      }
-
-      await refreshCart();
+      await fetchCart();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, booting]);
 
   const actions = useMemo(() => {
     return {
-      refreshCart,
+      fetchCart,
+      refreshCart: fetchCart, // alias for backwards compat
 
       markCartSeen: async () => {
-        if (!user) return;
+        if (!userRef.current) return;
         const res = await markCartSeen();
         setFromResponse(res);
         return res;
       },
       markCartRead: async () => {
-        if (!user) return;
+        if (!userRef.current) return;
         const res = await markCartSeen();
         setFromResponse(res);
         return res;
@@ -211,110 +135,67 @@ export function CartProvider({ children }) {
 
       /**
        * addToCart(deviceId, qty, options?)
-       * options:
-       * - variant: { storage, color, condition }
-       * - meta: { nameSnapshot, thumbnailSnapshot, unitPriceSnapshot }
+       * ✅ Updates state directly from response — no extra GET needed.
        */
       addToCart: async (deviceId, qty = 1, options = undefined) => {
+        if (!userRef.current) {
+          throw new Error("You must be logged in to add items to your cart.");
+        }
+
         const id = String(deviceId);
         const v = normVariant(options?.variant);
-
-        // Guest cart path
-        if (!user) {
-          const guestItems = loadGuestItems();
-          const k = guestItemId(id, v);
-
-          const meta = options?.meta || {};
-          const nameSnapshot = String(meta.nameSnapshot || "Device");
-          const thumbnailSnapshot = String(meta.thumbnailSnapshot || "/phone-placeholder.png");
-          const unitPriceSnapshot = Number(meta.unitPriceSnapshot || 0);
-
-          const existing = guestItems.find((x) => String(x.id) === k);
-          if (existing) {
-            existing.qty = clampQty(Number(existing.qty || 0) + clampQty(qty));
-          } else {
-            guestItems.push({
-              id: k,
-              deviceId: id,
-              variant: v,
-              qty: clampQty(qty),
-              nameSnapshot,
-              thumbnailSnapshot,
-              unitPriceSnapshot,
-            });
-          }
-
-          saveGuestItems(guestItems);
-          const res = buildGuestCart(guestItems);
-          setFromResponse({ data: res });
-          return { data: res };
-        }
-
-        // Logged-in: server DB cart
         const res = await addToCartApi(id, qty, v);
         setFromResponse(res);
-        return res;
+        return res?.data?.cart || EMPTY;
       },
 
+      /**
+       * ✅ KEY FIX: Updates cart state directly from PATCH response.
+       * Previously: cleared cart → re-fetched (if refetch failed, cart went empty).
+       * Now: PATCH returns full cart, apply it straight to state. Instant + reliable.
+       */
       updateCartItem: async (itemId, qty) => {
-        // Guest cart path
-        if (!user) {
-          const id = String(itemId);
-          const guestItems = loadGuestItems();
-          const idx = guestItems.findIndex((x) => String(x.id) === id || String(x.deviceId) === id);
-          if (idx === -1) return { data: buildGuestCart(guestItems) };
-
-          const q = Number(qty);
-          if (!Number.isFinite(q)) return { data: buildGuestCart(guestItems) };
-
-          if (q <= 0) guestItems.splice(idx, 1);
-          else guestItems[idx].qty = clampQty(q);
-
-          saveGuestItems(guestItems);
-          const res = buildGuestCart(guestItems);
-          setFromResponse({ data: res });
-          return { data: res };
-        }
-
+        if (!userRef.current) return;
         const res = await updateCartItemApi(itemId, qty);
         setFromResponse(res);
-        return res;
+        return res?.data?.cart || EMPTY;
       },
 
+      /**
+       * ✅ Same fix: use DELETE response directly, no extra GET.
+       */
       removeCartItem: async (itemId) => {
-        if (!user) {
-          const id = String(itemId);
-          const guestItems = loadGuestItems().filter((x) => String(x.id) !== id && String(x.deviceId) !== id);
-          saveGuestItems(guestItems);
-          const res = buildGuestCart(guestItems);
-          setFromResponse({ data: res });
-          return { data: res };
-        }
-
+        if (!userRef.current) return;
         const res = await removeCartItemApi(itemId);
         setFromResponse(res);
-        return res;
+        return res?.data?.cart || EMPTY;
       },
 
+      /**
+       * ✅ clearCart: use DELETE /cart response directly.
+       */
       clearCart: async () => {
-        if (!user) {
-          saveGuestItems([]);
-          const res = buildGuestCart([]);
-          setFromResponse({ data: res });
-          return { data: res };
-        }
-
+        if (!userRef.current) return;
         const res = await clearCartApi();
-        if (res?.data?.cart) setFromResponse(res);
-        else {
-          setCart(EMPTY);
-          setCount(0);
-          setCartUnread(false);
+        setFromResponse(res);
+        return res?.data?.cart || EMPTY;
+      },
+
+      syncPrices: async () => {
+        if (!userRef.current) return;
+        setLoading(true);
+        try {
+          const res = await syncCartPricesApi();
+          setFromResponse(res);
+          return res;
+        } finally {
+          setLoading(false);
         }
-        return res;
       },
     };
-  }, [user?.id]);
+  // fetchCart is intentionally stable via useRef pattern, [] dep is correct
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = useMemo(
     () => ({ cart, count, cartUnread, loading, ...actions }),
