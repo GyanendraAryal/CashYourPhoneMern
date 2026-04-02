@@ -12,6 +12,17 @@ import {
   variantKey,
 } from "../services/cart.service.js";
 
+/**
+ * Defensive helper — ensures cart.items is always a valid array.
+ * Prevents "Cannot read properties of undefined (reading 'length')" crashes
+ * when a corrupted / legacy document is fetched from MongoDB.
+ */
+function ensureItems(cart) {
+  if (cart && !Array.isArray(cart.items)) {
+    cart.items = [];
+  }
+}
+
 function clampQtyForAdd(qty) {
   const n = Number(qty);
   if (!Number.isFinite(n)) return null;
@@ -85,6 +96,9 @@ export const updateItem = asyncHandler(async (req, res) => {
     return res.json(data);
   }
 
+  // ✅ Defensive: guard against corrupted cart document
+  ensureItems(cart);
+
   // ✅ Prefer true cart item id, fallback to product id for legacy carts
   const idxByItemId = cart.items.findIndex((i) => String(i._id) === id);
   const idxByProductId = cart.items.findIndex((i) => String(i.product) === id);
@@ -120,6 +134,9 @@ export const removeItem = asyncHandler(async (req, res) => {
     return res.json(data);
   }
 
+  // ✅ Defensive: guard against corrupted cart document
+  ensureItems(cart);
+
   const before = cart.items.length;
 
   // ✅ Prefer true cart item id, fallback to product id for legacy carts
@@ -137,63 +154,14 @@ export const removeItem = asyncHandler(async (req, res) => {
   return res.json(data);
 });
 
-/**
- * POST /api/v1/cart/merge
- * Body: { items: [{ deviceId, qty, variant }] }
- */
-export const mergeCart = asyncHandler(async (req, res) => {
-  const items = Array.isArray(req.body?.items) ? req.body.items : [];
-
-  const cart = await getOrCreateCart(req.user.id);
-
-  // Index existing by device+variant
-  const index = new Map();
-  for (const it of cart.items) {
-    const k = lineKey(it.product, it.variant);
-    index.set(k, it);
-  }
-
-  for (const gi of items) {
-    const pid = String(gi?.deviceId || gi?.productId || "");
-    const qtyRaw = Number(gi?.qty);
-    if (!pid || !Number.isFinite(qtyRaw) || qtyRaw <= 0) continue;
-
-    // Merge should NOT throw if out_of_stock; we still keep line and flag it in GET
-    const dev = await Device.findById(pid).select("price").lean();
-    if (!dev) continue;
-
-    const v = normVariant(gi?.variant);
-    const k = lineKey(pid, v);
-
-    const qty = clampQty(qtyRaw);
-
-    const existing = index.get(k);
-    if (existing) {
-      existing.qty = clampQty(Number(existing.qty || 0) + qty);
-    } else {
-      const created = {
-        product: pid,
-        variant: v,
-        qty,
-        priceSnapshot: Number(dev.price || 0),
-      };
-      cart.items.push(created);
-      index.set(k, created);
-    }
-  }
-
-  await assertCartWithinStock(cart);
-
-  cart.lastUpdatedAt = new Date();
-  await cart.save();
-
-  const data = await buildCartResponse(req, req.user.id);
-  return res.json(data);
-});
+// NOTE: mergeCart (guest cart merge) intentionally removed.
+// Authentication is now mandatory. All cart operations require a valid session.
 
 export const clearCart = asyncHandler(async (req, res) => {
   const cart = await Cart.findOne({ user: req.user.id });
   if (cart) {
+    // ✅ Defensive: guard against corrupted cart document
+    ensureItems(cart);
     cart.items = [];
     cart.lastUpdatedAt = new Date();
     await cart.save();
@@ -208,6 +176,30 @@ export const markSeen = asyncHandler(async (req, res) => {
     cart.lastSeenAt = new Date();
     await cart.save();
   }
+  const data = await buildCartResponse(req, req.user.id);
+  return res.json(data);
+});
+
+export const syncPrices = asyncHandler(async (req, res) => {
+  const cart = await Cart.findOne({ user: req.user.id });
+  if (!cart || !Array.isArray(cart.items)) {
+    return res.json(await buildCartResponse(req, req.user.id));
+  }
+
+  const pids = cart.items.map((i) => i.product);
+  const devices = await Device.find({ _id: { $in: pids } }).select("price");
+  const priceMap = new Map(devices.map((d) => [String(d._id), d.price]));
+
+  for (const item of cart.items) {
+    const latest = priceMap.get(String(item.product));
+    if (latest !== undefined) {
+      item.priceSnapshot = Number(latest || 0);
+    }
+  }
+
+  cart.lastUpdatedAt = new Date();
+  await cart.save();
+
   const data = await buildCartResponse(req, req.user.id);
   return res.json(data);
 });
