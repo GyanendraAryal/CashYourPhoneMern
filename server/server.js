@@ -50,7 +50,7 @@ import adminAuditRoutes from "./src/routes/admin/audit.routes.js";
 import adminAnalyticsRoutes from "./src/routes/admin/analytics.routes.js";
 import adminPricingRoutes from "./src/routes/admin/pricing.routes.js";
 
-// import adminPaymentRoutes from "./src/routes/admin/payment.routes.js"; // disabled for no-payments ship
+import adminPaymentRoutes from "./src/routes/admin/payment.routes.js";
 
 import csrfRoutes from "./src/routes/csrf.routes.js";
 import cartRoutes from "./src/routes/cart.routes.js";
@@ -205,6 +205,10 @@ app.use((req, res, next) => {
 
   // allow webhooks (verification must happen inside controller)
   if (req.path.startsWith("/api/v1/payments/webhook/")) return next();
+  
+  // allow eSewa redirects (verification with signature must happen in controller)
+  if (req.path.startsWith("/api/v1/payments/esewa/success")) return next();
+  if (req.path.startsWith("/api/v1/payments/esewa/failure")) return next();
 
   // allow recovery endpoints only
   if (req.path.startsWith("/api/v1/user/forgot-password")) return next();
@@ -257,7 +261,7 @@ app.use("/api/admin/pricing", adminPricingRoutes);
 app.use("/api/admin/upload", adminUploadRoutes);
 app.use("/api/admin/notifications", adminNotificationsRoutes);
 app.use("/api/admin/sell-requests", adminSellRoutes);
-// app.use("/api/admin/payments", adminPaymentRoutes); // disabled for no-payments ship
+app.use("/api/admin/payments", adminPaymentRoutes);
 
 // ================= ERRORS =================
 app.use(notFound);
