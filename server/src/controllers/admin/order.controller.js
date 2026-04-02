@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Order from "../../models/Order.js";
 import asyncHandler from "../../utils/asyncHandler.js";
+import { restoreOrderInventory } from "../../modules/order/order.service.js";
 
 function toInt(v, def) {
   const n = Number.parseInt(String(v ?? ""), 10);
@@ -66,12 +67,31 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Invalid status" });
   }
 
-  const order = await Order.findById(id);
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const order = await Order.findById(id).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-  order.status = status;
-  await order.save();
+    const oldStatus = order.status;
+    order.status = status;
+    await order.save({ session });
 
-  const out = order.toObject ? order.toObject() : order;
-  res.json({ ok: true, data: out, ...out });
+    // If newly cancelled, restore stock
+    if (status === "cancelled" && oldStatus !== "cancelled") {
+      await restoreOrderInventory(order.items, session);
+    }
+
+    await session.commitTransaction();
+    const out = order.toObject ? order.toObject() : order;
+    res.json({ ok: true, data: out, ...out });
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 });
