@@ -1,6 +1,7 @@
 import { useMyOrders } from "../hooks/useOrders";
 import { Link } from "react-router-dom";
 import { OrderListSkeleton } from "../components/skeletons/OrderSkeleton";
+import EsewaButton from "../components/payments/EsewaButton";
 
 export default function MyOrders() {
   const { data, isLoading, error } = useMyOrders();
@@ -42,10 +43,13 @@ export default function MyOrders() {
                   Total: <span className="font-bold text-text-primary">NPR {o.total?.toLocaleString() ?? "—"}</span>
                 </div>
               </div>
-              <div className="shrink-0">
+              <div className="shrink-0 flex flex-col gap-2">
+                {o.paymentStatus === "unpaid" && o.status !== "cancelled" && (
+                  <EsewaButton orderId={o._id || o.id} amount={o.total} />
+                )}
                 <Link
                   to={`/my-orders/${o._id || o.id}`}
-                  className="inline-block border border-border-muted px-4 py-2 rounded-xl text-sm font-bold hover:bg-surface-white-subtle transition-colors"
+                  className="inline-block border border-border-muted px-4 py-2 rounded-xl text-sm font-bold text-center hover:bg-surface-white-subtle transition-colors"
                 >
                   View Details
                 </Link>
