@@ -10,6 +10,15 @@ export const initiateEsewa = async (req, res, next) => {
   }
 };
 
+export const initiateEsewaCheckout = async (req, res, next) => {
+  try {
+    const result = await paymentService.initiateEsewaCheckout(req.body, req.user.id);
+    res.status(200).json({ status: "success", ...result });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const esewaSuccess = async (req, res, next) => {
   const clientReturnUrl = paymentService.getClientAppUrl();
   try {
@@ -52,3 +61,16 @@ export const esewaFailure = async (req, res, next) => {
     next(err);
   }
 };
+export async function adminVerifyPayment(req, res, next) {
+  try {
+    const { id } = req.params;
+    const payment = await paymentService.adminVerifyEsewa(id);
+    res.status(200).json({
+      status: "success",
+      message: "Payment verified successfully",
+      payment
+    });
+  } catch (err) {
+    next(err);
+  }
+}
