@@ -260,9 +260,9 @@ export default function Navbar() {
               {cart?.items?.length > 0 && (
                 <div className="p-4 bg-surface-white-subtle/50 border-t border-border-muted">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm font-bold text-text-muted">Subtotal</span>
+                    <span className="text-sm font-bold text-text-muted">Total</span>
                     <span className="font-extrabold text-primary-blue-active">
-                      NPR {cart?.total || cart?.subtotal?.toLocaleString()}
+                      NPR {Number(cart?.total || 0).toLocaleString()}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
