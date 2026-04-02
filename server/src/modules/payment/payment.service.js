@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 import Payment from "../../models/Payment.js";
 import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
+import CheckoutSession from "../../models/CheckoutSession.js";
+import Device from "../../models/Device.js";
+import { genSequentialOrderNumber } from "../../controllers/order.controller.js";
+import { createAdminNotification } from "../../services/adminNotification.service.js";
 import AppError from "../../utils/AppError.js";
 
 const VALID_PROVIDERS = ["khalti", "esewa", "bank"];
@@ -125,6 +129,75 @@ export const initiateEsewaPayment = async (orderId, userId) => {
 };
 
 /**
+ * eSewa checkout initiation (from Cart directly)
+ */
+export const initiateEsewaCheckout = async (contactPayload, userId) => {
+  const cart = await Cart.findOne({ user: userId });
+  if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+    throw new AppError("Cart is empty", 400);
+  }
+
+  const productIds = cart.items.map((it) => it.product).filter(Boolean);
+  const devices = await Device.find({ _id: { $in: productIds } });
+  const byId = new Map(devices.map((d) => [String(d._id), d]));
+
+  let total = 0;
+  const items = cart.items.map((it) => {
+    const d = byId.get(String(it.product));
+    if (!d || String(d.availability || "").toLowerCase() === "out_of_stock") {
+      throw new AppError(`Device unavailable: ${d?.name || "Item"}`, 400);
+    }
+    const qty = Number(it.qty || 0);
+    const price = Number(it.priceSnapshot || 0);
+    if (price !== Number(d.price || 0)) {
+      throw new AppError("Price changed for an item in your cart", 400);
+    }
+    if (qty > 0 && price >= 0) total += price * qty;
+    return {
+      product: it.product,
+      name: String(d.name || ""),
+      condition: String(d.condition || ""),
+      price,
+      qty,
+      thumbnail: d.thumbnail || ""
+    };
+  }).filter(Boolean);
+
+  if (items.length === 0) throw new AppError("Cart has no valid items", 400);
+
+  const session = await CheckoutSession.create({
+    user: userId,
+    contact: contactPayload,
+    items,
+    total,
+  });
+
+  const config = getEsewaConfig();
+  const transactionUuid = String(session._id);
+  const totalAmount = Number(total).toFixed(2);
+  
+  const message = `total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${config.productCode}`;
+  const signature = buildSignature(message, config.secretKey);
+
+  return {
+    paymentUrl: config.formUrl,
+    fields: {
+      amount: totalAmount,
+      tax_amount: "0",
+      total_amount: totalAmount,
+      transaction_uuid: transactionUuid,
+      product_code: config.productCode,
+      product_service_charge: "0",
+      product_delivery_charge: "0",
+      success_url: `${config.serverPublicUrl}/api/v1/payments/esewa/success`,
+      failure_url: `${config.serverPublicUrl}/api/v1/payments/esewa/failure`,
+      signed_field_names: "total_amount,transaction_uuid,product_code",
+      signature,
+    }
+  };
+};
+
+/**
  * VERIFY eSewa payment (Server-to-Server)
  */
 export const verifyEsewaPayment = async (dataB64) => {
@@ -157,47 +230,170 @@ export const verifyEsewaPayment = async (dataB64) => {
 
   if (expectedSig !== signature) throw new AppError("Payment security verification failed", 403);
 
-  const paymentPreview = await Payment.findById(transaction_uuid).populate("order");
-  if (!paymentPreview) throw new AppError("Payment record not found", 404);
-  if (paymentPreview.status === "succeeded") return paymentPreview;
+  // Security: Ensure total_amount matches the payment record
+  let isCheckoutSession = false;
+  let paymentPreview = await Payment.findById(transaction_uuid).populate("order");
+  let checkoutSession = null;
+
+  if (!paymentPreview) {
+    checkoutSession = await CheckoutSession.findById(transaction_uuid);
+    if (!checkoutSession) throw new AppError("Payment record not found", 404);
+    isCheckoutSession = true;
+  }
+
+  if (!isCheckoutSession && paymentPreview.status === "succeeded") {
+    console.log(`[Payment] Idempotent hit: ${transaction_uuid} already succeeded.`);
+    return paymentPreview;
+  }
+  if (isCheckoutSession && checkoutSession.status === "completed") {
+    console.log(`[Payment] Idempotent hit: CheckoutSession ${transaction_uuid} already completed.`);
+    return await Payment.findOne({ transactionUuid: transaction_uuid }).populate("order");
+  }
+
+  const recordAmount = isCheckoutSession 
+    ? Number(checkoutSession.total).toFixed(2)
+    : Number(paymentPreview.amount).toFixed(2);
 
   const url = new URL(config.statusBaseUrl);
   url.searchParams.set("product_code", config.productCode);
-  url.searchParams.set("total_amount", Number(paymentPreview.amount).toFixed(2));
+  url.searchParams.set("total_amount", recordAmount);
   url.searchParams.set("transaction_uuid", transaction_uuid);
 
+  console.log(`[eSewa] Verifying status for ${transaction_uuid} at ${url.origin}...`);
   const resp = await fetch(url.toString());
   const statusData = await resp.json().catch(() => ({}));
+  
+  console.log(`[eSewa] Status response for ${transaction_uuid}:`, statusData);
 
   if (statusData?.status !== "COMPLETE") {
-    paymentPreview.status = "failed";
-    await paymentPreview.save();
+    if (paymentPreview) {
+      paymentPreview.status = "failed";
+      await paymentPreview.save();
+    }
     throw new AppError("Payment not completed at provider", 400);
   }
 
   const session = await mongoose.startSession();
+  let paymentResult = paymentPreview;
   try {
     await session.withTransaction(async () => {
-      const payment = await Payment.findById(transaction_uuid).session(session);
-      if (!payment) throw new AppError("Payment record not found", 404);
-      if (payment.status === "succeeded") return;
+      if (isCheckoutSession) {
+        const sessionRecord = await CheckoutSession.findById(transaction_uuid).session(session);
+        if (sessionRecord.status === "completed") return;
 
-      const order = await Order.findById(payment.order).session(session);
-      if (!order) throw new AppError("Order not found", 404);
+        const orderNumber = await genSequentialOrderNumber(session);
+        const orderDoc = {
+          orderNumber,
+          user: sessionRecord.user,
+          contact: sessionRecord.contact,
+          items: sessionRecord.items,
+          total: sessionRecord.total,
+          status: "processing",
+          paymentStatus: "paid",
+        };
+        const createdOrders = await Order.create([orderDoc], { session });
+        const newOrder = createdOrders[0];
 
-      payment.status = "succeeded";
-      payment.reference = statusData.refId;
-      await payment.save({ session });
+        // Create Payment record
+        const pCreated = await Payment.create([{
+          order: newOrder._id,
+          provider: "esewa",
+          transactionUuid: transaction_uuid,
+          amount: sessionRecord.total,
+          status: "succeeded",
+          reference: statusData.refId,
+        }], { session });
+        paymentResult = pCreated[0];
 
-      order.paymentStatus = "paid";
-      order.status = "processing";
-      await order.save({ session });
+        // Mark checkout session as complete
+        sessionRecord.status = "completed";
+        await sessionRecord.save({ session });
 
-      await Cart.deleteOne({ user: order.user }).session(session);
+        // Clear user's cart
+        await Cart.deleteOne({ user: sessionRecord.user }).session(session);
+
+        // Notify admins
+        await createAdminNotification({
+          type: "NEW_ORDER",
+          entityModel: "Order",
+          entityId: newOrder._id,
+          message: `New order created & paid via eSewa: ${orderNumber}`,
+          session,
+        });
+      } else {
+        const payment = await Payment.findById(transaction_uuid).session(session);
+        if (!payment) throw new AppError("Payment record not found", 404);
+        if (payment.status === "succeeded") return;
+
+        const order = await Order.findById(payment.order).session(session);
+        if (!order) throw new AppError("Order not found", 404);
+
+        payment.status = "succeeded";
+        payment.reference = statusData.refId;
+        await payment.save({ session });
+
+        order.paymentStatus = "paid";
+        order.status = "processing";
+        await order.save({ session });
+
+        await Cart.deleteOne({ user: order.user }).session(session);
+      }
     });
   } finally {
     await session.endSession();
   }
 
+  if (isCheckoutSession) {
+     return await Payment.findById(paymentResult._id).populate("order");
+  }
   return await Payment.findById(transaction_uuid).populate("order");
 };
+
+/**
+ * Admin manual verification (does not require redirect payload)
+ */
+export async function adminVerifyEsewa(paymentId) {
+  const config = getEsewaConfig();
+  const payment = await Payment.findById(paymentId).populate("order");
+  if (!payment) throw new AppError("Payment record not found", 404);
+  if (payment.provider !== "esewa") throw new AppError("Not an eSewa payment", 400);
+  
+  if (payment.status === "succeeded") return payment;
+
+  const url = new URL(config.statusBaseUrl);
+  url.searchParams.set("product_code", config.productCode);
+  url.searchParams.set("total_amount", Number(payment.amount).toFixed(2));
+  url.searchParams.set("transaction_uuid", String(payment._id));
+
+  console.log(`[Admin] Manually verifying eSewa payment ${paymentId}...`);
+  const resp = await fetch(url.toString());
+  const statusData = await resp.json().catch(() => ({}));
+
+  if (statusData?.status !== "COMPLETE") {
+    throw new AppError(`status of transaction at eSewa is: ${statusData?.status || "UNKNOWN"}`, 400);
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      payment.status = "succeeded";
+      payment.reference = statusData.refId;
+      payment.webhookVerified = true;
+      payment.lastCheckedAt = new Date();
+      await payment.save({ session });
+
+      if (payment.order) {
+        const order = await Order.findById(payment.order).session(session);
+        if (order) {
+          order.paymentStatus = "paid";
+          order.status = "processing";
+          await order.save({ session });
+        }
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return await Payment.findById(paymentId).populate("order");
+}
