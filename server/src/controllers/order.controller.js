@@ -5,7 +5,7 @@ import { createAdminNotification } from "../services/adminNotification.service.j
 import Device from "../models/Device.js";
 import Counter from "../models/Counter.js";
 
-async function genSequentialOrderNumber(session) {
+export async function genSequentialOrderNumber(session) {
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -26,6 +26,12 @@ export async function createOrderFromCart(req, res, next) {
   session.startTransaction();
 
   try {
+    // --- Guard: ensure user is attached by authUser middleware ---
+    if (!req.user?.id) {
+      await session.abortTransaction();
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     // --- validate checkout contact ---
     const contact = req.body?.contact || {};
     const fullName = String(contact.fullName || "").trim();
@@ -41,9 +47,20 @@ export async function createOrderFromCart(req, res, next) {
     }
 
     const cart = await Cart.findOne({ user: req.user.id }).session(session);
-    if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+    
+    if (!cart) {
       await session.abortTransaction();
-      return res.status(400).json({ message: "Cart is empty" });
+      console.error(`[Order] Cart not found for user: ${req.user.id}`);
+      return res.status(400).json({ message: "Cart not found. Please add items to your cart first." });
+    }
+
+    // ✅ Defensive: normalize items in case of corrupted DB document
+    if (!Array.isArray(cart.items)) cart.items = [];
+
+    if (cart.items.length === 0) {
+      await session.abortTransaction();
+      console.error(`[Order] Cart is empty for user: ${req.user.id}`);
+      return res.status(400).json({ message: "Your cart is empty. Please add items to your cart before placing an order." });
     }
 
     // Validate cart items against current catalog (exists, in stock, price unchanged)
@@ -107,7 +124,7 @@ export async function createOrderFromCart(req, res, next) {
       return res.status(400).json({ message: "Cart has no valid items" });
     }
 
-    // ✅ FIX: define orderNumber variable (used later for notification)
+    // ✅ Generate sequential order number
     const orderNumber = await genSequentialOrderNumber(session);
 
     const orderDoc = {
@@ -131,8 +148,12 @@ export async function createOrderFromCart(req, res, next) {
       session,
     });
 
-    // ✅ Do NOT clear cart here; clear it only after payment SUCCESS (eSewa callback)
-    // await Cart.deleteOne({ user: req.user.id }).session(session);
+    // ✅ Clear the cart immediately after order creation.
+    // Order is persisted as paymentStatus: "unpaid" — users who fail payment
+    // can see their order in /my-orders and re-initiate payment.
+    cart.items = [];
+    cart.lastUpdatedAt = new Date();
+    await cart.save({ session });
 
     await session.commitTransaction();
     return res.status(201).json(created[0]);
