@@ -17,6 +17,9 @@ export async function connectDB(uri) {
       const conn = await mongoose.connect(uri, {
         autoIndex: !isProd,
         autoCreate: !isProd,
+        serverSelectionTimeoutMS: 8000,  // Fail fast: don't wait 30s for DB
+        socketTimeoutMS: 15000,          // Kill hanging socket after 15s
+        connectTimeoutMS: 10000,         // Connection timeout
       });
 
       console.log(`✅ MongoDB connected: ${conn.connection.host}/${conn.connection.name}`);
