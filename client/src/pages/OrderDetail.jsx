@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { cancelOrder, getOrder } from "../services/orderService";
 import ConfirmModal from "../components/ConfirmModal";
+import EsewaButton from "../components/payments/EsewaButton";
 
 function money(n) {
   const num = Number(n);
@@ -175,8 +176,11 @@ export default function OrderDetail() {
                 <div className="text-xs font-semibold text-text-muted">
                   Payment
                 </div>
-                <div className="mt-1 text-base font-bold text-text-primary">
-                  {order.paymentStatus || "unpaid"}
+                <div className="mt-1 text-base font-bold text-text-primary flex items-center justify-between gap-2">
+                  <span>{order.paymentStatus || "unpaid"}</span>
+                  {order.paymentStatus === "unpaid" && order.status !== "cancelled" && (
+                    <EsewaButton orderId={order._id || id} amount={displayTotal} className="py-1 px-3 text-xs" />
+                  )}
                 </div>
                 <div className="mt-1 text-xs text-text-muted">
                   Method: {order.paymentMethod || "—"}
